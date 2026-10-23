@@ -829,6 +829,7 @@ const PAGES = [
 ];
 const PRESET_STAFF = ['dashboard','form'];
 const PRESET_ALL = PAGES.map(p => p.key);
+const PRESET_NURSE = PRESET_ALL.filter(k => k !== 'admin');
 const PAGE_LABEL = Object.fromEntries(PAGES.map(p => [p.key, p.label]));
 
 async function sha256Hex(text){
@@ -1104,6 +1105,7 @@ async function deleteUser(username){
 
 $('btnSaveUser').addEventListener('click', addUser);
 $('presetStaff').addEventListener('click', () => setChecks('pg-', PRESET_STAFF));
+$('presetNurse').addEventListener('click', () => setChecks('pg-', PRESET_NURSE));
 $('presetAdmin').addEventListener('click', () => setChecks('pg-', PRESET_ALL));
 $('btnUpdateUser').addEventListener('click', saveEdit);
 $('btnCancelEdit').addEventListener('click', closeEdit);
