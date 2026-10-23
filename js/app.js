@@ -909,14 +909,9 @@ function initAuth(){
   $('loginForm').addEventListener('submit', e => { e.preventDefault(); onLogin(); });
 }
 
-// ชื่อผู้ใช้จะถูกแปลงเป็นอีเมลภายในเพื่อใช้กับ Supabase Auth (ไม่ต้องใช้ Gmail)
-const LOGIN_DOMAIN = 'healthtracker.app';
 // บัญชีผู้ดูแลระบบหลัก ลบไม่ได้และมีสิทธิ์ทุกหน้าเสมอ
-const ADMIN_USERNAME = 'admin@' + LOGIN_DOMAIN;
-function toLoginEmail(username){
-  const u = username.trim().toLowerCase();
-  return u.includes('@') ? u : u + '@' + LOGIN_DOMAIN;
-}
+const ADMIN_USERNAME = 'admin';
+function normUsername(username){ return username.trim().toLowerCase(); }
 
 // อีเมลที่อนุญาตต้องมีแถวใน app_users และ active = true (RLS ตรวจให้ที่ฐานข้อมูล)
 async function loadAllowedUser(email){
@@ -925,24 +920,24 @@ async function loadAllowedUser(email){
   return { username: email, name: data.display_name, pages: data.pages || [] };
 }
 
+// ตั้งหรือเปลี่ยนรหัสผ่านผ่านฟังก์ชันในฐานข้อมูล (เก็บแบบเข้ารหัส)
+async function setPassword(username, password){
+  const { data, error } = await sb.rpc('set_password', { p_username: username, p_password: password });
+  if(error || !data){ toast('ตั้งรหัสผ่านไม่สำเร็จ' + (error ? ': ' + error.message : '')); return false; }
+  return true;
+}
+
 async function onLogin(){
   $('loginError').hidden = true;
   if(!sb){ showLoginError('โหลดระบบเข้าสู่ระบบไม่สำเร็จ ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต'); return; }
-  const username = $('loginUser').value.trim();
+  const username = normUsername($('loginUser').value);
   const password = $('loginPass').value;
   if(!username || !password){ showLoginError('กรุณากรอกชื่อผู้ใช้และรหัสผ่าน'); return; }
-  const email = toLoginEmail(username);
-  let { data, error } = await sb.auth.signInWithPassword({ email, password });
-  if(error){
-    // ผู้ใช้ที่ผู้ดูแลเพิ่มไว้แต่ยังไม่เคยตั้งรหัสผ่าน ให้ตั้งรหัสผ่านตอนเข้าใช้ครั้งแรก
-    const { data: allowed } = await sb.rpc('is_allowed_email', { p_email: email });
-    if(!allowed){ showLoginError('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง'); return; }
-    const r = await sb.auth.signUp({ email, password });
-    if(r.error){ showLoginError('ตั้งรหัสผ่านไม่สำเร็จ: ' + r.error.message); return; }
-    if(!r.data.session){ showLoginError('ต้องปิด Confirm email ใน Supabase ก่อนจึงจะเข้าใช้ได้'); return; }
-    data = r.data;
-  }
-  const user = await loadAllowedUser(data.user.email);
+  const { data, error } = await sb.rpc('login_user', { p_username: username, p_password: password });
+  if(error){ showLoginError('เข้าสู่ระบบไม่สำเร็จ: ' + error.message); return; }
+  const row = (data || [])[0];
+  if(!row){ showLoginError('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง'); return; }
+  const user = { username: row.username, name: row.display_name, pages: row.pages || [] };
   if(!user){
     await sb.auth.signOut();
     showLoginError('อีเมลนี้ยังไม่ได้รับอนุญาตให้ใช้ระบบ กรุณาติดต่อผู้ดูแลระบบ');
@@ -1015,24 +1010,27 @@ function readChecks(prefix){
 
 // ---- เพิ่มผู้ใช้ใหม่ ----
 function clearAddForm(){
-  ['uName','uDisplay'].forEach(id => { $(id).value = ''; });
+  ['uName','uDisplay','uPass'].forEach(id => { $(id).value = ''; });
   setChecks('pg-', PRESET_STAFF);
 }
 async function addUser(){
-  const username = toLoginEmail($('uName').value);
+  const username = normUsername($('uName').value);
   const name = $('uDisplay').value.trim();
+  const password = $('uPass').value;
   const pages = readChecks('pg-');
-  if(!isValidEmail(username)){ toast('กรุณากรอกชื่อผู้ใช้ให้ถูกต้อง (อังกฤษ ตัวเลข)'); return; }
+  if(!/^[a-z0-9._-]{3,}$/.test(username)){ toast('ชื่อผู้ใช้ต้องมีอย่างน้อย 3 ตัว เป็นอังกฤษ ตัวเลข หรือ . _ -'); return; }
   if(!name){ toast('กรุณากรอกชื่อที่แสดง'); return; }
+  if(password.length < 4){ toast('กรุณาตั้งรหัสผ่านอย่างน้อย 4 ตัว'); return; }
   if(!pages.length){ toast('เลือกหน้าจอที่ใช้ได้อย่างน้อย 1 หน้า'); return; }
 
   const list = getUsers();
   if(list.some(u => u.username === username)){
-    toast('มีอีเมลนี้อยู่แล้ว ให้กดแก้ไขในตารางด้านบนแทน');
+    toast('มีชื่อผู้ใช้นี้อยู่แล้ว ให้กดแก้ไขในตารางด้านบนแทน');
     return;
   }
   list.push({ username, name, pages });
   if(!(await saveUsers(list))) return;
+  if(!(await setPassword(username, password))) return;
   clearAddForm();
   renderAdmin();
   toast('เพิ่มผู้ใช้แล้ว');
@@ -1045,6 +1043,7 @@ function openEdit(username){
   $('editTitle').textContent = u.username;
   $('editCard').dataset.user = u.username;
   $('eDisplay').value = u.name;
+  $('ePass').value = '';
   setChecks('eg-', u.pages);
   $('editCard').hidden = false;
   $('editCard').scrollIntoView({ behavior:'smooth', block:'center' });
@@ -1067,8 +1066,12 @@ async function saveEdit(){
   const adminsAfter = list.filter(u => u.username !== username && u.pages.includes('admin')).length + (pages.includes('admin') ? 1 : 0);
   if(adminsAfter === 0){ toast('ต้องมีผู้ดูแลระบบอย่างน้อย 1 คน'); return; }
 
+  const password = $('ePass').value;
+  if(password && password.length < 4){ toast('รหัสผ่านใหม่ต้องมีอย่างน้อย 4 ตัว'); return; }
+
   Object.assign(target, { name, pages });
   if(!(await saveUsers(list))) return;
+  if(password && !(await setPassword(username, password))) return;
 
   // ถ้าแก้บัญชีที่กำลังใช้อยู่ ให้สิทธิ์มีผลทันที
   if(currentUsername() === username){
