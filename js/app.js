@@ -1,20 +1,8 @@
-const KEY = 'screening_records_v1';
 const TH_MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
 
 // ข้อมูลตัวอย่าง (mockup)
 
-function loadRecords(){
-  try{
-    const raw = localStorage.getItem(KEY);
-    if(raw) return JSON.parse(raw);
-    localStorage.setItem(KEY, JSON.stringify(SEED));
-  }catch(e){}
-  return SEED.slice();
-}
-function saveRecords(list){
-  try{ localStorage.setItem(KEY, JSON.stringify(list)); }catch(e){}
-}
-let records = loadRecords();
+let records = [];
 
 const $ = id => document.getElementById(id);
 const pad = n => String(n).padStart(2,'0');
@@ -150,6 +138,20 @@ function toast(msg){
   toast._t = setTimeout(() => t.classList.remove('show'), 2400);
 }
 
+async function loadRecordsRemote(){
+  const { data, error } = await sb.from('screening_records').select('*').order('created_at');
+  if(error){ toast('โหลดผลคัดกรองไม่สำเร็จ: ' + error.message); return; }
+  records = data.map(r => ({ id: r.id, code: r.code, name: r.name, age: r.age, date: r.screen_date, sbp: r.sbp, dbp: r.dbp, fbs: r.fbs }));
+}
+
+// โหลดข้อมูลจาก Supabase หลังเข้าสู่ระบบ
+async function loadData(){
+  await loadRecordsRemote();
+  if(canView('admin')) await loadUsers();
+  renderDashboard();
+  renderAdmin();
+}
+
 function renderDashboard(){
   const people = new Set(records.map(r => r.code || r.name)).size;
   const total = records.length;
@@ -252,25 +254,37 @@ function showResult(f, st){
   box.scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 
-function evaluate(){
+// รวมค่าทุกช่องในฟอร์มคัดกรองเป็นอ็อบเจกต์ เพื่อเก็บเป็นแบบสอบถามทั้งชุด
+function collectForm(){
+  const out = {};
+  document.querySelectorAll('#view-form input, #view-form select, #view-form textarea').forEach(el => {
+    if(el.id) out[el.id] = el.type === 'checkbox' ? el.checked : el.value;
+  });
+  return out;
+}
+
+async function evaluate(){
   const f = readForm();
   if(!f.name){ toast('กรุณากรอกชื่อ-นามสกุล'); return; }
   if(!f.sbp || !f.dbp){ toast('กรุณากรอกค่าความดันโลหิต'); return; }
 
   const st = statusOf(f);
-  records.push({
-    id: 'R' + Date.now(),
+  const { data, error } = await sb.from('screening_records').insert({
     code: 'REC-' + pad(records.length + 1),
     name: f.name,
-    age: f.age,
-    date: f.date,
-    sbp: f.sbp, dbp: f.dbp, fbs: f.fbs
-  });
-  saveRecords(records);
+    age: parseInt(f.age, 10) || null,
+    screen_date: f.date,
+    sbp: Math.round(f.sbp), dbp: Math.round(f.dbp), fbs: Math.round(f.fbs) || null,
+    answers: collectForm()
+  }).select().single();
+  if(error){ toast('บันทึกไม่สำเร็จ: ' + error.message); return; }
+
+  const rec = { id: data.id, code: data.code, name: data.name, age: data.age, date: data.screen_date, sbp: data.sbp, dbp: data.dbp, fbs: data.fbs };
+  records.push(rec);
   renderDashboard();
   showResult(f, st);
   toast('บันทึกผลคัดกรองเรียบร้อยแล้ว');
-  maybeAlert(records[records.length - 1]);
+  maybeAlert(rec);
 }
 
 function toggleQuitYears(){
@@ -400,7 +414,7 @@ async function sha256Hex(text){
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
 }
 function currentPages(){
-  try{ const u = JSON.parse(sessionStorage.getItem('login_user') || 'null'); return u ? (u.pages || []) : []; }
+  try{ const u = JSON.parse(localStorage.getItem('login_user') || 'null'); return u ? (u.pages || []) : []; }
   catch(e){ return []; }
 }
 function canView(name){
@@ -428,17 +442,47 @@ function showLoginError(msg){
 }
 async function logout(){
   if(sb) await sb.auth.signOut();
-  try{ sessionStorage.removeItem('login_user'); }catch(e){}
+  try{ localStorage.removeItem('login_user'); }catch(e){}
   location.reload();
 }
 let sb = null;
+
+// ออกจากระบบอัตโนมัติเมื่อไม่มีการใช้งานเกิน 10 นาที
+const IDLE_LIMIT_MS = 10 * 60 * 1000;
+let lastWrite = 0;
+function touchActivity(){
+  try{ localStorage.setItem('last_active', String(Date.now())); }catch(e){}
+}
+function onUserActivity(){
+  if(Date.now() - lastWrite < 5000) return;
+  lastWrite = Date.now();
+  touchActivity();
+}
+function idleExpired(){
+  const t = Number(localStorage.getItem('last_active') || 0);
+  return !t || Date.now() - t > IDLE_LIMIT_MS;
+}
+function startIdleWatch(){
+  ['click','keydown','mousemove','touchstart','scroll'].forEach(ev => document.addEventListener(ev, onUserActivity, { passive: true }));
+  setInterval(() => { if(localStorage.getItem('login_user') && idleExpired()) logout(); }, 30000);
+}
 
 function initAuth(){
   sb = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY) : null;
   $('btnLogout').addEventListener('click', logout);
   let saved = null;
-  try{ saved = JSON.parse(sessionStorage.getItem('login_user') || 'null'); }catch(e){}
-  if(saved){ enterApp(saved); return; }
+  try{ saved = JSON.parse(localStorage.getItem('login_user') || 'null'); }catch(e){}
+  if(saved && idleExpired()){
+    try{ localStorage.removeItem('login_user'); }catch(e){}
+    if(sb) sb.auth.signOut();
+    saved = null;
+  }
+  if(saved){
+    enterApp(saved);
+    if(sb) loadData();
+    startIdleWatch();
+    return;
+  }
   $('appRoot').hidden = true;
   $('view-login').hidden = false;
   if(window.google) initGoogle();
@@ -474,29 +518,38 @@ async function onGoogleCredential(resp){
     showLoginError('บัญชีนี้ยังไม่ได้กำหนดหน้าจอที่ใช้ได้ กรุณาติดต่อผู้ดูแลระบบ');
     return;
   }
-  try{ sessionStorage.setItem('login_user', JSON.stringify(user)); }catch(e){}
+  try{ localStorage.setItem('login_user', JSON.stringify(user)); }catch(e){}
+  touchActivity();
+  startIdleWatch();
   enterApp(user);
   setView(firstAllowedPage());
+  await loadData();
 }
 initAuth();
 
 // ---- ผู้ดูแลระบบ ----
 // รายชื่อผู้ใช้ที่แก้ไขได้ เก็บในเบราว์เซอร์ (เริ่มจาก CONFIG.USERS ครั้งแรก)
-function getUsers(){
-  let list = null;
-  try{
-    const saved = JSON.parse(localStorage.getItem('users_v1') || 'null');
-    if(Array.isArray(saved)) list = saved;
-  }catch(e){}
-  if(!list) list = CONFIG.USERS.map(u => ({ ...u }));
-  return list.map(u => ({ ...u, pages: Array.isArray(u.pages) ? u.pages : (u.role === 'admin' ? PRESET_ALL : PRESET_STAFF) }));
+let usersCache = [];
+function getUsers(){ return usersCache; }
+
+// โหลดรายชื่อผู้ใช้จาก app_users (เฉพาะแอดมินที่อ่านได้ทั้งหมด)
+async function loadUsers(){
+  const { data, error } = await sb.from('app_users').select('email, display_name, pages, active').order('email');
+  if(error){ toast('โหลดรายชื่อผู้ใช้ไม่สำเร็จ: ' + error.message); return; }
+  usersCache = data.map(r => ({ username: r.email, name: r.display_name, pages: r.pages || [] }));
 }
-function saveUsers(list){
-  try{ localStorage.setItem('users_v1', JSON.stringify(list)); return true; }
-  catch(e){ toast('บันทึกไม่สำเร็จ เบราว์เซอร์นี้ไม่อนุญาตให้เก็บข้อมูล'); return false; }
+
+// บันทึกรายการทั้งหมดลง app_users: upsert ทุกแถว และลบแถวที่หายไปจากรายการ
+async function saveUsers(list){
+  const removed = usersCache.filter(o => !list.some(n => n.username === o.username)).map(o => o.username);
+  let res = await sb.from('app_users').upsert(list.map(u => ({ email: u.username, display_name: u.name, pages: u.pages, active: true })));
+  if(!res.error && removed.length) res = await sb.from('app_users').delete().in('email', removed);
+  if(res.error){ toast('บันทึกไม่สำเร็จ: ' + res.error.message); return false; }
+  usersCache = list.map(u => ({ ...u }));
+  return true;
 }
 function currentUsername(){
-  try{ const u = JSON.parse(sessionStorage.getItem('login_user') || 'null'); return u ? u.username : null; }
+  try{ const u = JSON.parse(localStorage.getItem('login_user') || 'null'); return u ? u.username : null; }
   catch(e){ return null; }
 }
 function adminCount(list){ return list.filter(u => u.pages.includes('admin')).length; }
@@ -527,29 +580,24 @@ function readChecks(prefix){
 
 // ---- เพิ่มผู้ใช้ใหม่ ----
 function clearAddForm(){
-  ['uName','uDisplay','uPass'].forEach(id => { $(id).value = ''; });
+  ['uName','uDisplay'].forEach(id => { $(id).value = ''; });
   setChecks('pg-', PRESET_STAFF);
 }
 async function addUser(){
   const username = $('uName').value.trim().toLowerCase();
   const name = $('uDisplay').value.trim();
   const pages = readChecks('pg-');
-  const pw = $('uPass').value;
-  if(!username || !name){ toast('กรุณากรอกชื่อผู้ใช้และชื่อที่แสดง'); return; }
-  if(!pw){ toast('ผู้ใช้ใหม่ต้องมีรหัสผ่าน'); return; }
+  if(!isValidEmail(username)){ toast('กรุณากรอกอีเมล Gmail ให้ถูกต้อง'); return; }
+  if(!name){ toast('กรุณากรอกชื่อที่แสดง'); return; }
   if(!pages.length){ toast('เลือกหน้าจอที่ใช้ได้อย่างน้อย 1 หน้า'); return; }
 
   const list = getUsers();
   if(list.some(u => u.username === username)){
-    toast('มีชื่อผู้ใช้นี้อยู่แล้ว ให้กดแก้ไขในตารางด้านบนแทน');
+    toast('มีอีเมลนี้อยู่แล้ว ให้กดแก้ไขในตารางด้านบนแทน');
     return;
   }
-  let hash;
-  try{ hash = await sha256Hex(pw); }
-  catch(e){ toast('เบราว์เซอร์นี้ไม่รองรับการเข้ารหัส กรุณาเปิดผ่าน https'); return; }
-
-  list.push({ username, name, pages, passwordHash: hash });
-  if(!saveUsers(list)) return;
+  list.push({ username, name, pages });
+  if(!(await saveUsers(list))) return;
   clearAddForm();
   renderAdmin();
   toast('เพิ่มผู้ใช้แล้ว');
@@ -562,7 +610,6 @@ function openEdit(username){
   $('editTitle').textContent = u.username;
   $('editCard').dataset.user = u.username;
   $('eDisplay').value = u.name;
-  $('ePass').value = '';
   setChecks('eg-', u.pages);
   $('editCard').hidden = false;
   $('editCard').scrollIntoView({ behavior:'smooth', block:'center' });
@@ -576,7 +623,6 @@ async function saveEdit(){
   if(!username) return;
   const name = $('eDisplay').value.trim();
   const pages = readChecks('eg-');
-  const pw = $('ePass').value;
   if(!name){ toast('กรุณากรอกชื่อที่แสดง'); return; }
   if(!pages.length){ toast('เลือกหน้าจอที่ใช้ได้อย่างน้อย 1 หน้า'); return; }
 
@@ -586,18 +632,13 @@ async function saveEdit(){
   const adminsAfter = list.filter(u => u.username !== username && u.pages.includes('admin')).length + (pages.includes('admin') ? 1 : 0);
   if(adminsAfter === 0){ toast('ต้องมีผู้ดูแลระบบอย่างน้อย 1 คน'); return; }
 
-  let hash = target.passwordHash;
-  if(pw){
-    try{ hash = await sha256Hex(pw); }
-    catch(e){ toast('เบราว์เซอร์นี้ไม่รองรับการเข้ารหัส กรุณาเปิดผ่าน https'); return; }
-  }
-  Object.assign(target, { name, pages, passwordHash: hash });
-  if(!saveUsers(list)) return;
+  Object.assign(target, { name, pages });
+  if(!(await saveUsers(list))) return;
 
   // ถ้าแก้บัญชีที่กำลังใช้อยู่ ให้สิทธิ์มีผลทันที
   if(currentUsername() === username){
     const me = { username, name, pages };
-    try{ sessionStorage.setItem('login_user', JSON.stringify(me)); }catch(e){}
+    try{ localStorage.setItem('login_user', JSON.stringify(me)); }catch(e){}
     enterApp(me);
     const active = document.querySelector('.nav button.active');
     if(!canView(active ? active.dataset.view : 'dashboard')) setView(firstAllowedPage());
@@ -608,14 +649,14 @@ async function saveEdit(){
 }
 
 // ---- ลบผู้ใช้ ----
-function deleteUser(username){
+async function deleteUser(username){
   if(currentUsername() === username){ toast('ลบบัญชีที่กำลังใช้อยู่ไม่ได้'); return; }
   const list = getUsers();
   const target = list.find(u => u.username === username);
   if(!target) return;
   if(target.pages.includes('admin') && adminCount(list) <= 1){ toast('ต้องมีผู้ดูแลระบบอย่างน้อย 1 คน'); return; }
   if(!window.confirm('ลบผู้ใช้ ' + username + ' ใช่หรือไม่')) return;
-  saveUsers(list.filter(u => u.username !== username));
+  if(!(await saveUsers(list.filter(u => u.username !== username)))) return;
   if(!$('editCard').hidden && $('editCard').dataset.user === username) closeEdit();
   renderAdmin();
   toast('ลบผู้ใช้แล้ว');

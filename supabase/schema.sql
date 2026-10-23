@@ -21,9 +21,13 @@ create table if not exists public.screening_records (
   sbp         int,
   dbp         int,
   fbs         int,
+  answers     jsonb,
   created_by  text default (auth.jwt() ->> 'email'),
   created_at  timestamptz not null default now()
 );
+
+-- ถ้าตารางถูกสร้างไว้แล้ว ให้เพิ่มคอลัมน์ answers
+alter table public.screening_records add column if not exists answers jsonb;
 
 -- ฟังก์ชันตรวจสิทธิ์ (security definer เพื่อไม่ให้วนซ้ำกับ RLS ของตาราง app_users)
 create or replace function public.has_page(p text)

@@ -398,7 +398,7 @@
           <h3>ผู้ใช้ทั้งหมด</h3>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>ชื่อผู้ใช้</th><th>ชื่อที่แสดง</th><th>หน้าจอที่ใช้ได้</th><th>จัดการ</th></tr></thead>
+              <thead><tr><th>อีเมล Gmail</th><th>ชื่อที่แสดง</th><th>หน้าจอที่ใช้ได้</th><th>จัดการ</th></tr></thead>
               <tbody id="adminUsers"></tbody>
             </table>
           </div>
@@ -409,16 +409,12 @@
           <h3>เพิ่มผู้ใช้ใหม่</h3>
           <div class="grid2">
             <div class="field">
-              <label for="uName">ชื่อผู้ใช้</label>
-              <input id="uName" type="text" autocomplete="off" placeholder="เช่น asom02">
+              <label for="uName">อีเมล Gmail</label>
+              <input id="uName" type="email" autocomplete="off" placeholder="เช่น name@gmail.com">
             </div>
             <div class="field">
               <label for="uDisplay">ชื่อที่แสดง</label>
               <input id="uDisplay" type="text" placeholder="เช่น สมหญิง ใจดี">
-            </div>
-            <div class="field">
-              <label for="uPass">รหัสผ่าน</label>
-              <input id="uPass" type="password" autocomplete="new-password" placeholder="ผู้ใช้ใหม่ต้องมีรหัส">
             </div>
           </div>
 
@@ -447,10 +443,6 @@
             <div class="field">
               <label for="eDisplay">ชื่อที่แสดง</label>
               <input id="eDisplay" type="text">
-            </div>
-            <div class="field">
-              <label for="ePass">รหัสผ่านใหม่ (ถ้าไม่เปลี่ยนให้เว้นว่าง)</label>
-              <input id="ePass" type="password" autocomplete="new-password" placeholder="เว้นว่างเพื่อใช้รหัสเดิม">
             </div>
           </div>
           <div class="field" style="margin-top:16px">
