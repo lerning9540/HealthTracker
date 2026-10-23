@@ -14,8 +14,14 @@
   <div class="login-card">
     <div class="brand-logo login-logo">♥</div>
     <h2>ระบบคัดกรองสุขภาพชุมชน</h2>
-    <p>เข้าสู่ระบบด้วยบัญชี Gmail ที่ผู้ดูแลระบบเพิ่มไว้</p>
-    <div id="googleBtn" class="google-btn"></div>
+    <p>เข้าสู่ระบบด้วยชื่อผู้ใช้และรหัสผ่าน</p>
+    <form id="loginForm" class="login-form">
+      <label for="loginUser">ชื่อผู้ใช้</label>
+      <input id="loginUser" autocomplete="username" required>
+      <label for="loginPass">รหัสผ่าน</label>
+      <input id="loginPass" type="password" autocomplete="current-password" required>
+      <button class="btn" type="submit">เข้าสู่ระบบ</button>
+    </form>
     <p class="login-error" id="loginError" hidden></p>
   </div>
 </div>
@@ -52,7 +58,7 @@
       </div>
       <div class="topbar-right">
         <button class="bell-btn" data-view="notify" title="การแจ้งเตือน" aria-label="การแจ้งเตือน"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="nav-dot" id="ntBadge" hidden></span></button>
-        <div class="who-box"><div id="whoami"></div><div class="who-role" id="whoRole"></div><button class="btn-ghost" id="btnLogout" hidden>ออกจากระบบ</button></div>
+        <div class="who-box"><div class="who-role" id="whoRole"></div><div id="whoami"></div><button class="btn-ghost" id="btnLogout" hidden>ออกจากระบบ</button></div>
       </div>
     </header>
 
@@ -626,8 +632,8 @@
           <h3>เพิ่มผู้ใช้ใหม่</h3>
           <div class="grid2">
             <div class="field">
-              <label for="uName">อีเมล Gmail</label>
-              <input id="uName" type="email" autocomplete="off" placeholder="เช่น name@gmail.com">
+              <label for="uName">ชื่อผู้ใช้</label>
+              <input id="uName" autocomplete="off" placeholder="เช่น somchai">
             </div>
             <div class="field">
               <label for="uDisplay">ชื่อที่แสดง</label>
@@ -719,7 +725,6 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="https://accounts.google.com/gsi/client" async defer onload="initGoogle()"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="js/supabase-config.js"></script>
 <script src="js/config.js"></script>

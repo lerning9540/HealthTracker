@@ -906,14 +906,16 @@ function initAuth(){
   }
   $('appRoot').hidden = true;
   $('view-login').hidden = false;
-  if(window.google) initGoogle();
+  $('loginForm').addEventListener('submit', e => { e.preventDefault(); onLogin(); });
 }
 
-// เรียกหลังโหลดสคริปต์ของ Google แล้ว
-function initGoogle(){
-  if(!window.google || !$('googleBtn')) return;
-  google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onGoogleCredential });
-  google.accounts.id.renderButton($('googleBtn'), { theme: 'outline', size: 'large', text: 'signin_with', locale: 'th', width: 280 });
+// ชื่อผู้ใช้จะถูกแปลงเป็นอีเมลภายในเพื่อใช้กับ Supabase Auth (ไม่ต้องใช้ Gmail)
+const LOGIN_DOMAIN = 'ht.local';
+// บัญชีผู้ดูแลระบบหลัก ลบไม่ได้และมีสิทธิ์ทุกหน้าเสมอ
+const ADMIN_USERNAME = 'admin@' + LOGIN_DOMAIN;
+function toLoginEmail(username){
+  const u = username.trim().toLowerCase();
+  return u.includes('@') ? u : u + '@' + LOGIN_DOMAIN;
 }
 
 // อีเมลที่อนุญาตต้องมีแถวใน app_users และ active = true (RLS ตรวจให้ที่ฐานข้อมูล)
@@ -923,11 +925,23 @@ async function loadAllowedUser(email){
   return { username: email, name: data.display_name, pages: data.pages || [] };
 }
 
-async function onGoogleCredential(resp){
+async function onLogin(){
   $('loginError').hidden = true;
   if(!sb){ showLoginError('โหลดระบบเข้าสู่ระบบไม่สำเร็จ ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต'); return; }
-  const { data, error } = await sb.auth.signInWithIdToken({ provider: 'google', token: resp.credential });
-  if(error || !data.user){ showLoginError('เข้าสู่ระบบด้วย Gmail ไม่สำเร็จ ลองใหม่อีกครั้ง'); return; }
+  const username = $('loginUser').value.trim();
+  const password = $('loginPass').value;
+  if(!username || !password){ showLoginError('กรุณากรอกชื่อผู้ใช้และรหัสผ่าน'); return; }
+  const email = toLoginEmail(username);
+  let { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if(error){
+    // ผู้ใช้ที่ผู้ดูแลเพิ่มไว้แต่ยังไม่เคยตั้งรหัสผ่าน ให้ตั้งรหัสผ่านตอนเข้าใช้ครั้งแรก
+    const { data: allowed } = await sb.rpc('is_allowed_email', { p_email: email });
+    if(!allowed){ showLoginError('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง'); return; }
+    const r = await sb.auth.signUp({ email, password });
+    if(r.error){ showLoginError('ตั้งรหัสผ่านไม่สำเร็จ: ' + r.error.message); return; }
+    if(!r.data.session){ showLoginError('ต้องปิด Confirm email ใน Supabase ก่อนจึงจะเข้าใช้ได้'); return; }
+    data = r.data;
+  }
   const user = await loadAllowedUser(data.user.email);
   if(!user){
     await sb.auth.signOut();
@@ -1005,10 +1019,10 @@ function clearAddForm(){
   setChecks('pg-', PRESET_STAFF);
 }
 async function addUser(){
-  const username = $('uName').value.trim().toLowerCase();
+  const username = toLoginEmail($('uName').value);
   const name = $('uDisplay').value.trim();
   const pages = readChecks('pg-');
-  if(!isValidEmail(username)){ toast('กรุณากรอกอีเมล Gmail ให้ถูกต้อง'); return; }
+  if(!isValidEmail(username)){ toast('กรุณากรอกชื่อผู้ใช้ให้ถูกต้อง (อังกฤษ ตัวเลข)'); return; }
   if(!name){ toast('กรุณากรอกชื่อที่แสดง'); return; }
   if(!pages.length){ toast('เลือกหน้าจอที่ใช้ได้อย่างน้อย 1 หน้า'); return; }
 
@@ -1071,6 +1085,7 @@ async function saveEdit(){
 
 // ---- ลบผู้ใช้ ----
 async function deleteUser(username){
+  if(username === ADMIN_USERNAME){ toast('ห้ามลบบัญชีผู้ดูแลระบบหลัก'); return; }
   if(currentUsername() === username){ toast('ลบบัญชีที่กำลังใช้อยู่ไม่ได้'); return; }
   const list = getUsers();
   const target = list.find(u => u.username === username);
