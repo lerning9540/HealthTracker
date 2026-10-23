@@ -11,9 +11,11 @@ const opt = (v,t) => `<option value="${v}">${t}</option>`;
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtDate = iso => { const [y,m,d] = iso.split('-').map(Number); return `${d} ${TH_MONTHS[m-1]} ${y+543}`; };
 
+// เร่งด่วน: ความดัน ≥180/≥110 หรือน้ำตาล ≥200 ต้องส่งพบแพทย์ทันที
+// สงสัยป่วย: ความดัน 140–179 หรือ 90–109, น้ำตาล 126–199 เข้าติดตาม (BP Home 7 วัน)
 function statusOf(r){
-  if(r.sbp>=160 || r.dbp>=100 || r.fbs>=200) return 'refer';
-  if(r.sbp>=140 || r.dbp>=90 || r.fbs>=126) return 'recheck';
+  if(r.sbp>=180 || r.dbp>=110 || r.fbs>=200) return 'refer';
+  if((r.sbp>=140 && r.sbp<=179) || (r.dbp>=90 && r.dbp<=109) || (r.fbs>=126 && r.fbs<200)) return 'recheck';
   return 'normal';
 }
 function typeOf(r){
@@ -141,12 +143,251 @@ function toast(msg){
 async function loadRecordsRemote(){
   const { data, error } = await sb.from('screening_records').select('*').order('created_at');
   if(error){ toast('โหลดผลคัดกรองไม่สำเร็จ: ' + error.message); return; }
-  records = data.map(r => ({ id: r.id, code: r.code, name: r.name, age: r.age, date: r.screen_date, sbp: r.sbp, dbp: r.dbp, fbs: r.fbs, answers: r.answers || {} }));
+  records = data.map(r => ({ id: r.id, code: r.code, name: r.name, age: r.age, date: r.screen_date, sbp: r.sbp, dbp: r.dbp, fbs: r.fbs, answers: r.answers || {}, nurse_status: r.nurse_status, nurse_note: r.nurse_note, nurse_updated_at: r.nurse_updated_at }));
 }
+
+// ---- BP Home 7 วัน ----
+let bpHome = [];
+async function loadBpHome(){
+  const { data, error } = await sb.from('bp_home_readings').select('record_id, day_number, measured_at, systolic, diastolic');
+  if(error){ toast('โหลดข้อมูล BP Home ไม่สำเร็จ: ' + error.message); return; }
+  bpHome = data;
+}
+function bpHomeFor(recordId){
+  return bpHome.filter(x => x.record_id === recordId).sort((a, b) => a.day_number - b.day_number);
+}
+// คำนวณค่าเฉลี่ยเหมือนแอป HT Care (ตัดทศนิยมทิ้ง) เกินเกณฑ์เมื่อ ≥135/85
+function bpHomeAverage(list){
+  if(!list.length) return null;
+  const sys = Math.floor(list.reduce((a, x) => a + x.systolic, 0) / list.length);
+  const dia = Math.floor(list.reduce((a, x) => a + x.diastolic, 0) / list.length);
+  return { sys, dia, days: new Set(list.map(x => x.day_number)).size, elevated: sys >= 135 || dia >= 85 };
+}
+function openBp(recordId){
+  const r = records.find(x => x.id === recordId);
+  if(!r) return;
+  $('bpCard').dataset.record = recordId;
+  $('bpName').textContent = r.name || r.code;
+  $('bpDate').value = todayIso();
+  $('bpSys').value = '';
+  $('bpDia').value = '';
+  $('bpSave').hidden = !canView('fu_record');
+  renderBp();
+  $('bpCard').hidden = false;
+  $('bpCard').scrollIntoView({ behavior:'smooth', block:'center' });
+}
+function closeBp(){
+  $('bpCard').hidden = true;
+  delete $('bpCard').dataset.record;
+}
+function renderBp(){
+  const id = $('bpCard').dataset.record;
+  if(!id) return;
+  const list = bpHomeFor(id);
+  const avg = bpHomeAverage(list);
+  $('bpRows').innerHTML = [1,2,3,4,5,6,7].map(day => {
+    const hits = list.filter(x => x.day_number === day);
+    const last = hits[hits.length - 1];
+    return `<tr><td>วันที่ ${day}</td><td>${last ? fmtDate(last.measured_at) : '-'}</td><td>${last ? `${last.systolic}/${last.diastolic}` : '-'}</td></tr>`;
+  }).join('');
+  $('bpSummary').innerHTML = avg
+    ? `ค่าเฉลี่ย <b>${avg.sys}/${avg.dia}</b> mmHg จาก ${avg.days} วัน · <span class="badge ${avg.elevated ? 'b-bad' : 'b-ok'}">${avg.elevated ? 'เกินเกณฑ์ (≥135/85) ควรพบแพทย์' : 'อยู่ในเกณฑ์ปกติ (<135/85)'}</span>`
+    : 'ยังไม่มีข้อมูลการวัดที่บ้าน';
+}
+async function saveBp(){
+  if(!canView('fu_record')){ toast('บันทึกได้เฉพาะ อสม.'); return; }
+  const id = $('bpCard').dataset.record;
+  const day = Number($('bpDay').value);
+  const sys = parseInt($('bpSys').value, 10);
+  const dia = parseInt($('bpDia').value, 10);
+  const measured_at = $('bpDate').value;
+  if(!sys || !dia){ toast('กรุณากรอกค่าความดันให้ครบ'); return; }
+  if(!measured_at){ toast('กรุณาเลือกวันที่วัด'); return; }
+  const row = { record_id: id, day_number: day, measured_at, systolic: sys, diastolic: dia };
+  const { error } = await sb.from('bp_home_readings').insert(row);
+  if(error){ toast('บันทึกไม่สำเร็จ: ' + error.message); return; }
+  bpHome.push(row);
+  $('bpSys').value = '';
+  $('bpDia').value = '';
+  renderBp();
+  renderFollowUp();
+  toast('บันทึกการวัดที่บ้านแล้ว');
+}
+
+// ---- หน้ารายละเอียดผู้ป่วย: สถานะพยาบาลและบันทึกความดัน ----
+const NURSE_STATUS = [
+  ['pending_review', 'รอตรวจสอบ'],
+  ['acknowledged', 'รับทราบแล้ว'],
+  ['monitoring_home_bp', 'กำลังติดตาม BP Home 7 วัน'],
+  ['completed_evaluation', 'ติดตามครบตามแผน รอสรุปผล'],
+  ['referred_to_doctor', 'ประสานส่งต่อพบแพทย์แล้ว'],
+  ['follow_up_needed', 'ติดตามเพิ่มเติม']
+];
+let bpLogs = [];
+async function loadBpLogs(){
+  const { data, error } = await sb.from('bp_logs').select('record_id, measured_at, session, systolic, diastolic').order('measured_at');
+  if(error){ toast('โหลดบันทึกความดันไม่สำเร็จ: ' + error.message); return; }
+  bpLogs = data;
+}
+function renderLogs(){
+  const list = bpLogs.filter(x => x.record_id === currentPatientId).slice().reverse();
+  $('blRows').innerHTML = list.length ? list.map(x => `<tr>
+      <td>${fmtDate(x.measured_at)}</td><td>${esc(x.session)}</td><td>${x.systolic}/${x.diastolic}</td>
+    </tr>`).join('') : '<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px">ยังไม่มีการบันทึก</td></tr>';
+}
+async function saveLog(){
+  if(!canView('fu_record')){ toast('บันทึกความดันได้เฉพาะ อสม.'); return; }
+  const sys = parseInt($('blSys').value, 10);
+  const dia = parseInt($('blDia').value, 10);
+  const measured_at = $('blDate').value;
+  if(!sys || !dia){ toast('กรุณากรอกค่าความดันให้ครบ'); return; }
+  if(!measured_at){ toast('กรุณาเลือกวันที่วัด'); return; }
+  const row = { record_id: currentPatientId, measured_at, session: $('blSession').value, systolic: sys, diastolic: dia };
+  const { error } = await sb.from('bp_logs').insert(row);
+  if(error){ toast('บันทึกไม่สำเร็จ: ' + error.message); return; }
+  bpLogs.push(row);
+  $('blSys').value = '';
+  $('blDia').value = '';
+  renderLogs();
+  toast('บันทึกความดันแล้ว');
+}
+async function saveNurse(){
+  if(!canView('followup')){ toast('เฉพาะพยาบาลบันทึกสถานะได้'); return; }
+  const r = records.find(x => x.id === currentPatientId);
+  if(!r) return;
+  const nurse_status = $('nsStatus').value;
+  const nurse_note = $('nsNote').value.trim();
+  const nurse_updated_at = new Date().toISOString();
+  const { error } = await sb.from('screening_records').update({ nurse_status, nurse_note, nurse_updated_at }).eq('id', r.id);
+  if(error){ toast('บันทึกสถานะไม่สำเร็จ: ' + error.message); return; }
+  Object.assign(r, { nurse_status, nurse_note, nurse_updated_at });
+  toast('บันทึกสถานะแล้ว');
+}
+$('nsSave').addEventListener('click', saveNurse);
+$('blSave').addEventListener('click', saveLog);
+
+// ---- การแจ้งเตือน ----
+let acks = [];
+async function loadAcks(){
+  const { data, error } = await sb.from('notification_acks').select('record_id, kind');
+  if(error){ toast('โหลดการรับทราบไม่สำเร็จ: ' + error.message); return; }
+  acks = data;
+}
+const NOTIFY_TITLE = {
+  URGENT: '🚨 ความดันสูงวิกฤต',
+  SUSPECTED: '⚠️ เข้าเกณฑ์สงสัยป่วย',
+  COMPLETED_7DAYS: '✅ ติดตามครบ 7 วัน',
+  MISSED_DAYS: '⚠️ ขาดการบันทึก'
+};
+function notifyItems(){
+  const today = todayIso();
+  const items = [];
+  records.forEach(r => {
+    const st = statusOf(r);
+    if(st === 'normal') return;
+    const avg = bpHomeAverage(bpHomeFor(r.id));
+    const days = avg ? avg.days : 0;
+    if(st === 'refer') items.push({ key:'URGENT', type:'URGENT', r });
+    else items.push({ key:'SUSPECTED', type:'SUSPECTED', r });
+    if(days >= 7) items.push({ key:'COMPLETED_7DAYS', type:'COMPLETED_7DAYS', r });
+    else if(today > addDays(r.date, 7)) items.push({ key:'MISSED_DAYS', type:'MISSED_DAYS', r });
+  });
+  const acked = new Set(acks.map(a => a.record_id + '|' + a.kind));
+  return items.map(it => ({ ...it, done: acked.has(it.r.id + '|' + it.key) }))
+    .sort((a, b) => Number(a.done) - Number(b.done));
+}
+function renderNotify(){
+  const items = notifyItems();
+  $('ntRows').innerHTML = items.length ? items.map(it => `<tr>
+      <td>${NOTIFY_TITLE[it.type]}</td>
+      <td>${esc(it.r.name || it.r.code)}<small> · ${esc(it.r.code)}</small></td>
+      <td>${fmtDate(it.r.date)}</td>
+      <td>${it.done ? '<span class="badge b-ok">รับทราบแล้ว</span>' : '<span class="badge b-warn">ยังไม่รับทราบ</span>'}</td>
+      <td>
+        ${it.done ? '' : `<button class="btn-ghost" data-ack="${esc(it.key)}" data-rec="${esc(it.r.id)}">รับทราบแล้ว</button>`}
+        <button class="btn-ghost" data-detail="${esc(it.r.id)}">ดูรายละเอียด</button>
+      </td>
+    </tr>`).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">ไม่มีการแจ้งเตือน</td></tr>';
+}
+async function ackNotify(key, recordId){
+  const row = { record_id: recordId, kind: key };
+  const { error } = await sb.from('notification_acks').insert(row);
+  if(error){ toast('บันทึกการรับทราบไม่สำเร็จ: ' + error.message); return; }
+  acks.push(row);
+  renderNotify();
+  toast('รับทราบแล้ว');
+}
+$('ntRows').addEventListener('click', e => {
+  const btn = e.target.closest('[data-ack]');
+  if(btn) ackNotify(btn.dataset.ack, btn.dataset.rec);
+});
+
+// ---- หน้ารายละเอียดผู้ป่วย ----
+let currentPatientId = null;
+function openPatient(id){
+  currentPatientId = id;
+  setView('patient');
+}
+
+// กราฟแนวโน้มความดัน: จุดแรกคือค่าแรกรับ ตามด้วยค่าล่าสุดของแต่ละวันใน BP Home
+function trendSvg(r, list){
+  const pts = [{ x:0, s:r.sbp, d:r.dbp }];
+  for(let day = 1; day <= 7; day++){
+    const hit = list.filter(x => x.day_number === day).slice(-1)[0];
+    if(hit) pts.push({ x:day, s:hit.systolic, d:hit.diastolic });
+  }
+  const W = 600, H = 220, P = 34;
+  const X = x => P + (x / 7) * (W - 2 * P);
+  const Y = v => H - P - ((Math.min(Math.max(v, 60), 200) - 60) / 140) * (H - 2 * P);
+  const line = key => pts.map((p, k) => `${k ? 'L' : 'M'}${X(p.x)},${Y(p[key])}`).join('');
+  const dots = key => pts.map(p => `<circle cx="${X(p.x)}" cy="${Y(p[key])}" r="4"/>`).join('');
+  const labels = [0,1,2,3,4,5,6,7].map(x => `<text x="${X(x)}" y="${H - 10}" text-anchor="middle">${x ? 'วัน' + x : 'แรกรับ'}</text>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="กราฟความดันโลหิต">
+    <line x1="${P}" x2="${W - P}" y1="${Y(140)}" y2="${Y(140)}" stroke="#dc2626" stroke-dasharray="6 4"/>
+    <path d="${line('s')}" fill="none" stroke="#0f766e" stroke-width="2.5"/>
+    <path d="${line('d')}" fill="none" stroke="#2563eb" stroke-width="2.5"/>
+    <g fill="#0f766e">${dots('s')}</g>
+    <g fill="#2563eb">${dots('d')}</g>
+    <g font-size="12" fill="#64748b">${labels}</g>
+  </svg>
+  <p class="note" style="margin-top:6px">● <span style="color:#0f766e">ความดันตัวบน</span> · ● <span style="color:#2563eb">ความดันตัวล่าง</span></p>`;
+}
+
+function renderPatient(){
+  const r = records.find(x => x.id === currentPatientId);
+  if(!r){ setView('register'); return; }
+  const st = statusOf(r);
+  const list = bpHomeFor(r.id);
+  const avg = bpHomeAverage(list);
+  const fus = followUps.filter(f => f.record_id === r.id).sort((a, b) => b.visited_at.localeCompare(a.visited_at));
+  $('pdHead').innerHTML = `<div><h2>${esc(r.name || '-')}</h2><p>รหัส ${esc(r.code)} · อายุ ${esc(r.age || '-')} ปี · คัดกรองวันที่ ${fmtDate(r.date)}</p></div>
+    <span class="badge ${BADGE[st][0]}">${BADGE[st][1]}</span>`;
+  $('pdKpis').innerHTML = `
+    <div class="kpi"><div class="label">ความดันแรกรับ</div><div class="value c-brand">${r.sbp}/${r.dbp}</div><div class="sub">mmHg</div></div>
+    <div class="kpi"><div class="label">น้ำตาลในเลือด</div><div class="value c-teal">${r.fbs || '-'}</div><div class="sub">mg/dL</div></div>
+    <div class="kpi"><div class="label">ค่าเฉลี่ย BP Home</div><div class="value ${avg && avg.elevated ? 'c-red' : 'c-blue'}">${avg ? avg.sys + '/' + avg.dia : '-'}</div><div class="sub">${avg ? avg.days + ' วันที่วัด' : 'ยังไม่มีข้อมูล'}</div></div>
+    <div class="kpi"><div class="label">การติดตามล่าสุด</div><div class="value c-orange" style="font-size:18px">${fus[0] ? fmtDate(fus[0].visited_at) : '-'}</div><div class="sub">${fus[0] ? esc(fus[0].result) : 'ยังไม่มีการติดตาม'}</div></div>`;
+  $('pdChart').innerHTML = trendSvg(r, list);
+  $('nsStatus').innerHTML = NURSE_STATUS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
+  $('nsStatus').value = r.nurse_status || 'pending_review';
+  $('nsNote').value = r.nurse_note || '';
+  $('nsSave').hidden = !canView('followup');
+  $('nsStatus').disabled = !canView('followup');
+  $('nsNote').disabled = !canView('followup');
+  $('blDate').value = todayIso();
+  $('blSys').value = '';
+  $('blDia').value = '';
+  $('blSave').hidden = !canView('fu_record');
+  renderLogs();
+  $('pdFollow').innerHTML = fus.length ? fus.map(f => `<tr>
+      <td>${fmtDate(f.visited_at)}</td><td>${esc(f.result)}</td><td>${esc(f.note || '-')}</td>
+    </tr>`).join('') : '<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px">ยังไม่มีการติดตาม</td></tr>';
+}
+$('pdBack').addEventListener('click', () => setView('register'));
 
 // ---- ทะเบียนและติดตาม ----
 let followUps = [];
-let regTab = 'normal';
+let regFilter = 'all';
 
 function todayIso(){
   const t = new Date();
@@ -175,15 +416,20 @@ async function loadFollowUps(){
 function regList(){
   const q = $('regSearch').value.trim().toLowerCase();
   return records
-    .filter(r => regTab === 'risk' ? isRisk(r) : !isRisk(r))
+    .filter(r => regFilter === 'all' || statusOf(r) === regFilter)
     .filter(r => !q || (r.name || '').toLowerCase().includes(q) || (r.code || '').toLowerCase().includes(q))
     .slice().reverse();
 }
 function renderRegister(){
-  $('regNormalCount').textContent = records.filter(r => !isRisk(r)).length;
-  $('regRiskCount').textContent = records.filter(isRisk).length;
-  $('regTabNormal').classList.toggle('btn-primary', regTab === 'normal');
-  $('regTabRisk').classList.toggle('btn-primary', regTab === 'risk');
+  const cnt = { all: records.length, normal: 0, recheck: 0, refer: 0 };
+  records.forEach(r => cnt[statusOf(r)]++);
+  $('cntAll').textContent = cnt.all;
+  $('cntNormal').textContent = cnt.normal;
+  $('cntRecheck').textContent = cnt.recheck;
+  $('cntRefer').textContent = cnt.refer;
+  document.querySelectorAll('#view-register [data-filter]').forEach(b => {
+    b.classList.toggle('btn-primary', b.dataset.filter === regFilter);
+  });
   const list = regList();
   $('regRows').innerHTML = list.length ? list.map(r => {
     const st = statusOf(r);
@@ -195,8 +441,9 @@ function renderRegister(){
       <td>${r.sbp}/${r.dbp}</td>
       <td>${r.fbs || '-'}</td>
       <td><span class="badge ${BADGE[st][0]}">${BADGE[st][1]}</span></td>
+      <td><button class="btn-ghost" data-detail="${esc(r.id)}">ดูรายละเอียด</button></td>
     </tr>`;
-  }).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">ไม่พบข้อมูล</td></tr>';
+  }).join('') : '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px">ไม่พบข้อมูล</td></tr>';
 }
 
 const FU_LABEL = { pending:['b-warn','รอติดตาม'], overdue:['b-bad','เกินกำหนด'], done:['b-ok','ติดตามแล้ว'] };
@@ -215,7 +462,7 @@ function renderFollowUp(){
       <td>${fmtDate(addDays(r.date, 7))}</td>
       <td><span class="badge ${FU_LABEL[st][0]}">${FU_LABEL[st][1]}</span></td>
       <td>${last ? fmtDate(last.visited_at) + ' · ' + esc(last.result) : '-'}</td>
-      <td>${canView('fu_record') ? `<button class="btn-ghost" data-follow="${esc(r.id)}">บันทึกการติดตาม</button>` : '-'}</td>
+      <td><button class="btn-ghost" data-bphome="${esc(r.id)}">BP Home</button> ${canView('fu_record') ? `<button class="btn-ghost" data-follow="${esc(r.id)}">บันทึกการติดตาม</button>` : ''}</td>
     </tr>`;
   }).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">ยังไม่มีผู้ที่ต้องติดตาม</td></tr>';
 }
@@ -271,6 +518,9 @@ function exportRecordsCsv(list){
 async function loadData(){
   await loadRecordsRemote();
   await loadFollowUps();
+  await loadBpHome();
+  await loadBpLogs();
+  await loadAcks();
   if(canView('admin')) await loadUsers();
   renderDashboard();
   renderAdmin();
@@ -284,13 +534,18 @@ function renderDashboard(){
   const counts = { normal:0, recheck:0, refer:0 };
   records.forEach(r => counts[statusOf(r)]++);
 
-  $('kpiPeople').textContent = people;
-  $('kpiTotal').textContent = total;
-  $('kpiNormal').textContent = counts.normal;
-  $('kpiRecheck').textContent = counts.recheck;
-  $('kpiRefer').textContent = counts.refer;
-  $('kpiTotalSub').textContent = 'ครั้ง';
-  $('kpiNormalSub').textContent = 'คน';
+  // ตัวเลขตามแดชบอร์ดของแอป HT Care
+  const risk = records.filter(isRisk);
+  const overdue = risk.filter(r => followStatus(r) === 'overdue');
+  const seven = risk.filter(r => (bpHomeAverage(bpHomeFor(r.id)) || { days: 0 }).days >= 7);
+  $('kpiScreened').textContent = total;
+  $('kpiSuspect').textContent = counts.recheck;
+  $('kpiTracking').textContent = risk.filter(r => followStatus(r) === 'pending').length;
+  $('kpiSeven').textContent = seven.length;
+  $('kpiUrgent').textContent = new Set([...records.filter(r => statusOf(r) === 'refer'), ...overdue].map(r => r.id)).size;
+  $('thNormal').textContent = counts.normal + ' ราย';
+  $('thSuspect').textContent = counts.recheck + ' ราย';
+  $('thUrgent').textContent = counts.refer + ' ราย';
 
   $('sumNormal').textContent = counts.normal + ' คน';
   $('sumRecheck').textContent = counts.recheck + ' คน';
@@ -432,12 +687,19 @@ function clearForm(){
   toggleQuitYears();
 }
 
+function allowedView(name){
+  if(name === 'patient') return canView('dashboard') || canView('register') || canView('followup');
+  if(name === 'notify') return canView('followup') || canView('register');
+  return canView(name);
+}
+
 function setView(name){
-  if(!canView(name)){
+  const allowed = allowedView(name);
+  if(!allowed){
     toast('บัญชีนี้ไม่มีสิทธิ์เข้าหน้านี้');
     name = 'dashboard';
   }
-  const views = { dashboard:'view-dashboard', form:'view-form', register:'view-register', followup:'view-followup', report:'view-report', admin:'view-admin' };
+  const views = { dashboard:'view-dashboard', form:'view-form', register:'view-register', followup:'view-followup', patient:'view-patient', notify:'view-notify', report:'view-report', admin:'view-admin' };
   Object.entries(views).forEach(([key,id]) => { $(id).hidden = key !== name; });
   document.querySelectorAll('.nav button[data-view]').forEach(b => {
     b.classList.toggle('active', b.dataset.view === name);
@@ -453,6 +715,8 @@ function setView(name){
   if(name === 'admin') renderAdmin();
   if(name === 'register') renderRegister();
   if(name === 'followup') renderFollowUp();
+  if(name === 'patient') renderPatient();
+  if(name === 'notify') renderNotify();
 }
 
 function openSidebar(open){
@@ -555,7 +819,7 @@ function firstAllowedPage(){
   return PAGES.map(p => p.key).find(k => k !== 'admin' && canView(k)) || (canView('admin') ? 'admin' : 'dashboard');
 }
 function applyRights(){
-  document.querySelectorAll('.nav button[data-view]').forEach(b => { b.hidden = !canView(b.dataset.view); });
+  document.querySelectorAll('.nav button[data-view]').forEach(b => { b.hidden = !allowedView(b.dataset.view); });
   document.querySelectorAll('.nav button[data-admin]').forEach(b => { b.hidden = !canView('admin'); });
 }
 function enterApp(user){
@@ -843,7 +1107,7 @@ document.querySelectorAll('.nav button[data-stub]').forEach(b => {
 });
 document.querySelector('.content').addEventListener('click', e => {
   const btn = e.target.closest('[data-detail]');
-  if(btn) toast('หน้ารายละเอียดอยู่ในขั้นตอนพัฒนา');
+  if(btn) openPatient(btn.dataset.detail);
 });
 
 $('menuBtn').addEventListener('click', () => openSidebar(!$('sidebar').classList.contains('open')));
@@ -852,15 +1116,20 @@ $('scrim').addEventListener('click', closeSidebar);
 $('btnSaveAlert').addEventListener('click', saveAlertForm);
 $('btnTestAlert').addEventListener('click', testAlert);
 $('regSearch').addEventListener('input', renderRegister);
-$('regTabNormal').addEventListener('click', () => { regTab = 'normal'; renderRegister(); });
-$('regTabRisk').addEventListener('click', () => { regTab = 'risk'; renderRegister(); });
+document.querySelectorAll('#view-register [data-filter]').forEach(b => {
+  b.addEventListener('click', () => { regFilter = b.dataset.filter; renderRegister(); });
+});
 $('regExport').addEventListener('click', () => exportRecordsCsv(regList()));
 $('fuSave').addEventListener('click', saveFollow);
 $('fuCancel').addEventListener('click', closeFollow);
 $('fuRows').addEventListener('click', e => {
   const btn = e.target.closest('[data-follow]');
   if(btn) openFollow(btn.dataset.follow);
+  const bp = e.target.closest('[data-bphome]');
+  if(bp) openBp(bp.dataset.bphome);
 });
+$('bpSave').addEventListener('click', saveBp);
+$('bpClose').addEventListener('click', closeBp);
 loadAlertForm();
 retryPendingAlerts();
 
