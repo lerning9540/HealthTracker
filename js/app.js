@@ -910,7 +910,7 @@ function initAuth(){
 }
 
 // ชื่อผู้ใช้จะถูกแปลงเป็นอีเมลภายในเพื่อใช้กับ Supabase Auth (ไม่ต้องใช้ Gmail)
-const LOGIN_DOMAIN = 'ht.local';
+const LOGIN_DOMAIN = 'healthtracker.app';
 // บัญชีผู้ดูแลระบบหลัก ลบไม่ได้และมีสิทธิ์ทุกหน้าเสมอ
 const ADMIN_USERNAME = 'admin@' + LOGIN_DOMAIN;
 function toLoginEmail(username){
