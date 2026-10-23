@@ -715,7 +715,7 @@ function clearForm(){
 
 function allowedView(name){
   if(name === 'patient') return canView('dashboard') || canView('register') || canView('followup');
-  if(name === 'notify') return canView('followup') || canView('register');
+  if(name === 'notify') return canView('notify') || canView('followup') || canView('register');
   return canView(name);
 }
 
@@ -824,7 +824,8 @@ const PAGES = [
   { key:'admin',     label:'ผู้ดูแลระบบ' },
   { key:'register',  label:'ทะเบียนผลคัดกรอง' },
   { key:'followup',  label:'ติดตามและจัดการแผน' },
-  { key:'fu_record', label:'บันทึกผลติดตาม (อสม.)' }
+  { key:'fu_record', label:'บันทึกผลติดตาม (อสม.)' },
+  { key:'notify',    label:'การแจ้งเตือน' }
 ];
 const PRESET_STAFF = ['dashboard','form'];
 const PRESET_ALL = PAGES.map(p => p.key);
