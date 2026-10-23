@@ -426,35 +426,57 @@ function showLoginError(msg){
   el.textContent = msg;
   el.hidden = false;
 }
-async function handleLogin(e){
-  e.preventDefault();
-  $('loginError').hidden = true;
-  const username = $('loginUser').value.trim().toLowerCase();
-  const password = $('loginPass').value;
-  let hash = '';
-  try{ hash = await sha256Hex(password); }
-  catch(err){ showLoginError('เบราว์เซอร์นี้ไม่รองรับการเข้ารหัส กรุณาเปิดผ่าน https'); return; }
-  const user = getUsers().find(u => u.username.toLowerCase() === username && u.passwordHash === hash);
-  if(!user){ showLoginError('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง'); return; }
-  if(!user.pages.length){ showLoginError('บัญชีนี้ยังไม่ได้กำหนดหน้าจอที่ใช้ได้ กรุณาติดต่อผู้ดูแลระบบ'); return; }
-  const session = { username: user.username, name: user.name, pages: user.pages };
-  try{ sessionStorage.setItem('login_user', JSON.stringify(session)); }catch(err){}
-  $('loginPass').value = '';
-  enterApp(session);
-  setView(firstAllowedPage());
-}
-function logout(){
+async function logout(){
+  if(sb) await sb.auth.signOut();
   try{ sessionStorage.removeItem('login_user'); }catch(e){}
   location.reload();
 }
+let sb = null;
+
 function initAuth(){
-  $('loginForm').addEventListener('submit', handleLogin);
+  sb = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY) : null;
   $('btnLogout').addEventListener('click', logout);
   let saved = null;
   try{ saved = JSON.parse(sessionStorage.getItem('login_user') || 'null'); }catch(e){}
   if(saved){ enterApp(saved); return; }
   $('appRoot').hidden = true;
   $('view-login').hidden = false;
+  if(window.google) initGoogle();
+}
+
+// เรียกหลังโหลดสคริปต์ของ Google แล้ว
+function initGoogle(){
+  if(!window.google || !$('googleBtn')) return;
+  google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onGoogleCredential });
+  google.accounts.id.renderButton($('googleBtn'), { theme: 'outline', size: 'large', text: 'signin_with', locale: 'th', width: 280 });
+}
+
+// อีเมลที่อนุญาตต้องมีแถวใน app_users และ active = true (RLS ตรวจให้ที่ฐานข้อมูล)
+async function loadAllowedUser(email){
+  const { data, error } = await sb.from('app_users').select('email, display_name, pages, active').ilike('email', email).maybeSingle();
+  if(error || !data || !data.active) return null;
+  return { username: email, name: data.display_name, pages: data.pages || [] };
+}
+
+async function onGoogleCredential(resp){
+  $('loginError').hidden = true;
+  if(!sb){ showLoginError('โหลดระบบเข้าสู่ระบบไม่สำเร็จ ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต'); return; }
+  const { data, error } = await sb.auth.signInWithIdToken({ provider: 'google', token: resp.credential });
+  if(error || !data.user){ showLoginError('เข้าสู่ระบบด้วย Gmail ไม่สำเร็จ ลองใหม่อีกครั้ง'); return; }
+  const user = await loadAllowedUser(data.user.email);
+  if(!user){
+    await sb.auth.signOut();
+    showLoginError('อีเมลนี้ยังไม่ได้รับอนุญาตให้ใช้ระบบ กรุณาติดต่อผู้ดูแลระบบ');
+    return;
+  }
+  if(!user.pages.length){
+    await sb.auth.signOut();
+    showLoginError('บัญชีนี้ยังไม่ได้กำหนดหน้าจอที่ใช้ได้ กรุณาติดต่อผู้ดูแลระบบ');
+    return;
+  }
+  try{ sessionStorage.setItem('login_user', JSON.stringify(user)); }catch(e){}
+  enterApp(user);
+  setView(firstAllowedPage());
 }
 initAuth();
 

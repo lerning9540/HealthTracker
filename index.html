@@ -14,12 +14,8 @@
   <div class="login-card">
     <div class="brand-logo login-logo">♥</div>
     <h2>ระบบคัดกรองสุขภาพชุมชน</h2>
-    <p>กรอกชื่อผู้ใช้และรหัสผ่านที่ได้รับจากผู้ดูแลระบบ</p>
-    <form id="loginForm" class="login-form">
-      <input id="loginUser" type="text" autocomplete="username" placeholder="ชื่อผู้ใช้" required>
-      <input id="loginPass" type="password" autocomplete="current-password" placeholder="รหัสผ่าน" required>
-      <button class="btn btn-primary" type="submit">เข้าสู่ระบบ</button>
-    </form>
+    <p>เข้าสู่ระบบด้วยบัญชี Gmail ที่ผู้ดูแลระบบเพิ่มไว้</p>
+    <div id="googleBtn" class="google-btn"></div>
     <p class="login-error" id="loginError" hidden></p>
   </div>
 </div>
@@ -508,6 +504,9 @@
 
 <div class="toast" id="toast"></div>
 
+<script src="https://accounts.google.com/gsi/client" async defer onload="initGoogle()"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="js/supabase-config.js"></script>
 <script src="js/config.js"></script>
 <script src="js/seed.js"></script>
 <script src="js/app.js"></script>
