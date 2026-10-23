@@ -226,14 +226,15 @@ textarea{min-height:96px;resize:vertical}
 .check{display:flex;align-items:center;gap:8px;font-weight:400;font-size:14px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;cursor:pointer;margin:0}
 .check input{width:18px;height:18px;accent-color:var(--brand)}
 @media (max-width:600px){.check-grid{grid-template-columns:1fr}}
-.topbar-right{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.topbar-right{display:flex;flex-direction:row;align-items:center;gap:12px}
+.who-box{display:flex;flex-direction:column;align-items:flex-end;gap:2px;text-align:right}
 #whoami{font-weight:600;font-size:14px}
 .who-role{font-size:12px;opacity:.85}
 .day-strip{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 14px}
 .day-chip{display:inline-flex;width:38px;height:38px;border-radius:10px;align-items:center;justify-content:center;background:var(--line);color:var(--muted);font-weight:700;font-size:14px}
 .day-chip.done{background:var(--ok);color:#fff}
 .day-count{margin-left:6px;font-size:13px;font-weight:600;color:var(--ok)}
-.bell-btn{position:relative;width:40px;height:40px;border:0;border-radius:50%;background:rgba(255,255,255,.14);color:#fff;font-size:18px;cursor:pointer;margin-bottom:4px;padding:0}
+.bell-btn{position:relative;width:40px;height:40px;border:0;border-radius:50%;background:rgba(255,255,255,.14);color:#fff;font-size:18px;cursor:pointer;padding:0;flex:none;display:inline-flex;align-items:center;justify-content:center}
 .bell-btn .nav-dot{position:absolute;top:-4px;right:-6px;min-width:20px;height:20px;padding:0 5px;font-size:11px}
 .topbar-right .btn-ghost{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.5);color:#fff;margin-top:4px}
 .row-actions{white-space:nowrap}
