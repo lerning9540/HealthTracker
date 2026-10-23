@@ -34,7 +34,6 @@
       <button data-view="form"><span class="ico">+</span>คัดกรองสุขภาพ</button>
       <button data-view="register"><span class="ico">⚲</span>ทะเบียนประชาชนและผลคัดกรอง</button>
       <button data-view="followup"><span class="ico">☑</span>ติดตามและจัดการแผน</button>
-      <button data-view="notify"><span class="ico">🔔</span>การแจ้งเตือน</button>
       <button data-view="report"><span class="ico">▤</span>รายงานและส่งออก Excel</button>
       <button data-view="admin"><span class="ico">⚙</span>ผู้ดูแลระบบ</button>
     </nav>
@@ -51,7 +50,7 @@
           <p>หมู่ 9 ตำบลบ้านป่า อำเภอเมืองพิษณุโลก จังหวัดพิษณุโลก</p>
         </div>
       </div>
-      <div class="topbar-right"><div id="whoami"></div><div class="who-role" id="whoRole"></div><button class="btn-ghost" id="btnLogout" hidden>ออกจากระบบ</button></div>
+      <div class="topbar-right"><button class="bell-btn" data-view="notify" title="การแจ้งเตือน" aria-label="การแจ้งเตือน">🔔<span class="nav-dot" id="ntBadge" hidden></span></button><div id="whoami"></div><div class="who-role" id="whoRole"></div><button class="btn-ghost" id="btnLogout" hidden>ออกจากระบบ</button></div>
     </header>
 
     <main class="content">
@@ -81,10 +80,20 @@
         </div>
 
         <div class="card card-gap">
-          <h3>เกณฑ์การแปลผล</h3>
-          <div class="sum-row"><span><span class="badge b-ok">ปกติ</span> ความดัน &lt;140 และ &lt;90 mmHg, น้ำตาล &lt;126</span><b class="c-blue" id="thNormal"></b></div>
-          <div class="sum-row"><span><span class="badge b-warn">สงสัยป่วย</span> ความดัน 140–179 หรือ 90–109, น้ำตาล 126–199</span><b class="c-orange" id="thSuspect"></b></div>
-          <div class="sum-row"><span><span class="badge b-bad">เร่งด่วน</span> ความดัน ≥180 หรือ ≥110, น้ำตาล ≥200 (ส่งพบแพทย์ทันที)</span><b class="c-red" id="thUrgent"></b></div>
+          <h3>สัดส่วนการประเมินทางคลินิก (OR Logic)</h3>
+          <p class="muted small">จำแนกตามเกณฑ์ที่ได้รับ ความดันหรือน้ำตาลข้อใดข้อหนึ่งเข้าเกณฑ์ก็จัดกลุ่มนั้น</p>
+          <div class="ratio-row">
+            <div class="ratio-head"><span><span class="badge b-ok">ปกติ</span> &lt;140 และ &lt;90 mmHg, น้ำตาลงดอาหาร &lt;126</span><b class="c-blue" id="thNormal"></b></div>
+            <div class="ratio-track"><div class="ratio-fill f-ok" id="thNormalBar"></div></div>
+          </div>
+          <div class="ratio-row">
+            <div class="ratio-head"><span><span class="badge b-warn">กลุ่มสงสัยป่วย</span> 140–179 หรือ 90–109 mmHg, น้ำตาลงดอาหาร 8 ชม. ≥126</span><b class="c-orange" id="thSuspect"></b></div>
+            <div class="ratio-track"><div class="ratio-fill f-warn" id="thSuspectBar"></div></div>
+          </div>
+          <div class="ratio-row">
+            <div class="ratio-head"><span><span class="badge b-bad">ระดับอันตราย</span> ≥180 หรือ ≥110 mmHg (ส่งพบแพทย์ทันที)</span><b class="c-red" id="thUrgent"></b></div>
+            <div class="ratio-track"><div class="ratio-fill f-bad" id="thUrgentBar"></div></div>
+          </div>
         </div>
 
         <div class="dash-grid">
@@ -402,6 +411,7 @@
         </div>
         <div class="card" id="bpCard" hidden>
           <h3>BP Home 7 วัน: <span id="bpName"></span></h3>
+          <div class="day-strip" id="bpStrip"></div>
           <div class="table-wrap">
             <table>
               <thead><tr><th>วัน</th><th>วันที่วัด</th><th>ความดัน (mmHg)</th></tr></thead>
@@ -494,6 +504,7 @@
         </div>
         <div class="card card-gap">
           <h3>แนวโน้มความดัน (แรกรับ และ BP Home 7 วัน)</h3>
+          <div class="day-strip" id="pdStrip"></div>
           <div id="pdChart"></div>
           <p class="note">เส้นประสีแดงคือเกณฑ์ความดันตัวบน 140 mmHg</p>
         </div>

@@ -11,16 +11,19 @@ const opt = (v,t) => `<option value="${v}">${t}</option>`;
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtDate = iso => { const [y,m,d] = iso.split('-').map(Number); return `${d} ${TH_MONTHS[m-1]} ${y+543}`; };
 
-// เร่งด่วน: ความดัน ≥180/≥110 หรือน้ำตาล ≥200 ต้องส่งพบแพทย์ทันที
-// สงสัยป่วย: ความดัน 140–179 หรือ 90–109, น้ำตาล 126–199 เข้าติดตาม (BP Home 7 วัน)
+// เร่งด่วน: ความดัน ≥180/≥110 ต้องส่งพบแพทย์ทันที
+// สงสัยป่วย: ความดัน 140–179 หรือ 90–109, น้ำตาลงดอาหาร 8 ชม. ≥126 เข้าติดตาม (BP Home 7 วัน)
+// น้ำตาลไม่ได้งดอาหาร ≥110 ให้เจาะซ้ำพรุ่งนี้โดยงดอาหาร 8 ชม.
+function sugarRisk(r){ return r.fbs>=126 && (r.answers || {}).fFasting === 'fast8'; }
+function needsRetest(r){ return r.fbs>=110 && (r.answers || {}).fFasting !== 'fast8'; }
 function statusOf(r){
-  if(r.sbp>=180 || r.dbp>=110 || r.fbs>=200) return 'refer';
-  if((r.sbp>=140 && r.sbp<=179) || (r.dbp>=90 && r.dbp<=109) || (r.fbs>=126 && r.fbs<200)) return 'recheck';
+  if(r.sbp>=180 || r.dbp>=110) return 'refer';
+  if((r.sbp>=140 && r.sbp<=179) || (r.dbp>=90 && r.dbp<=109) || sugarRisk(r)) return 'recheck';
   return 'normal';
 }
 function typeOf(r){
   const bp = r.sbp>=140 || r.dbp>=90;
-  const sg = r.fbs>=126;
+  const sg = sugarRisk(r);
   if(bp && sg) return 'ความดัน/เบาหวาน';
   if(bp) return 'ความดันโลหิต';
   if(sg) return 'เบาหวาน';
@@ -180,11 +183,18 @@ function closeBp(){
   $('bpCard').hidden = true;
   delete $('bpCard').dataset.record;
 }
+// แถบ 1–7 วัน: วันที่บันทึกแล้วจะเป็นสีเขียว
+function dayStripHtml(list){
+  const done = new Set(list.map(x => x.day_number));
+  const chips = [1,2,3,4,5,6,7].map(d => `<span class="day-chip${done.has(d) ? ' done' : ''}">${d}</span>`).join('');
+  return `${chips}<span class="day-count">${done.size} / 7 วัน</span>`;
+}
 function renderBp(){
   const id = $('bpCard').dataset.record;
   if(!id) return;
   const list = bpHomeFor(id);
   const avg = bpHomeAverage(list);
+  $('bpStrip').innerHTML = dayStripHtml(list);
   $('bpRows').innerHTML = [1,2,3,4,5,6,7].map(day => {
     const hits = list.filter(x => x.day_number === day);
     const last = hits[hits.length - 1];
@@ -277,12 +287,14 @@ const NOTIFY_TITLE = {
   URGENT: '🚨 ความดันสูงวิกฤต',
   SUSPECTED: '⚠️ เข้าเกณฑ์สงสัยป่วย',
   COMPLETED_7DAYS: '✅ ติดตามครบ 7 วัน',
-  MISSED_DAYS: '⚠️ ขาดการบันทึก'
+  MISSED_DAYS: '⚠️ ขาดการบันทึก',
+  RETEST: '🩸 เจาะน้ำตาลซ้ำ (งดอาหาร 8 ชม.)'
 };
 function notifyItems(){
   const today = todayIso();
   const items = [];
   records.forEach(r => {
+    if(needsRetest(r)) items.push({ key:'RETEST', type:'RETEST', r });
     const st = statusOf(r);
     if(st === 'normal') return;
     const avg = bpHomeAverage(bpHomeFor(r.id));
@@ -296,8 +308,15 @@ function notifyItems(){
   return items.map(it => ({ ...it, done: acked.has(it.r.id + '|' + it.key) }))
     .sort((a, b) => Number(a.done) - Number(b.done));
 }
+function updateNotifyBadge(){
+  const unread = notifyItems().filter(it => !it.done).length;
+  const dot = $('ntBadge');
+  dot.textContent = unread;
+  dot.hidden = unread === 0;
+}
 function renderNotify(){
   const items = notifyItems();
+  updateNotifyBadge();
   $('ntRows').innerHTML = items.length ? items.map(it => `<tr>
       <td>${NOTIFY_TITLE[it.type]}</td>
       <td>${esc(it.r.name || it.r.code)}<small> · ${esc(it.r.code)}</small></td>
@@ -367,6 +386,7 @@ function renderPatient(){
     <div class="kpi"><div class="label">น้ำตาลในเลือด</div><div class="value c-teal">${r.fbs || '-'}</div><div class="sub">mg/dL</div></div>
     <div class="kpi"><div class="label">ค่าเฉลี่ย BP Home</div><div class="value ${avg && avg.elevated ? 'c-red' : 'c-blue'}">${avg ? avg.sys + '/' + avg.dia : '-'}</div><div class="sub">${avg ? avg.days + ' วันที่วัด' : 'ยังไม่มีข้อมูล'}</div></div>
     <div class="kpi"><div class="label">การติดตามล่าสุด</div><div class="value c-orange" style="font-size:18px">${fus[0] ? fmtDate(fus[0].visited_at) : '-'}</div><div class="sub">${fus[0] ? esc(fus[0].result) : 'ยังไม่มีการติดตาม'}</div></div>`;
+  $('pdStrip').innerHTML = dayStripHtml(list);
   $('pdChart').innerHTML = trendSvg(r, list);
   $('nsStatus').innerHTML = NURSE_STATUS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
   $('nsStatus').value = r.nurse_status || 'pending_review';
@@ -543,9 +563,14 @@ function renderDashboard(){
   $('kpiTracking').textContent = risk.filter(r => followStatus(r) === 'pending').length;
   $('kpiSeven').textContent = seven.length;
   $('kpiUrgent').textContent = new Set([...records.filter(r => statusOf(r) === 'refer'), ...overdue].map(r => r.id)).size;
-  $('thNormal').textContent = counts.normal + ' ราย';
-  $('thSuspect').textContent = counts.recheck + ' ราย';
-  $('thUrgent').textContent = counts.refer + ' ราย';
+  const pct = n => total ? Math.round(n / total * 100) : 0;
+  $('thNormal').textContent = `${counts.normal} ราย (${pct(counts.normal)}%)`;
+  $('thSuspect').textContent = `${counts.recheck} ราย (${pct(counts.recheck)}%)`;
+  $('thUrgent').textContent = `${counts.refer} ราย (${pct(counts.refer)}%)`;
+  $('thNormalBar').style.width = pct(counts.normal) + '%';
+  $('thSuspectBar').style.width = pct(counts.recheck) + '%';
+  $('thUrgentBar').style.width = pct(counts.refer) + '%';
+  updateNotifyBadge();
 
   $('sumNormal').textContent = counts.normal + ' คน';
   $('sumRecheck').textContent = counts.recheck + ' คน';
@@ -614,13 +639,14 @@ function readForm(){
 
 function showResult(f, st){
   const bpHigh = f.sbp>=140 || f.dbp>=90;
-  const sgHigh = f.fbs>=126;
+  const fast = f.fasting === 'fast8';
+  const sgHigh = f.fbs>=126 && fast;
   const bpMsg = bpHigh
     ? 'พบค่าความดันถึงเกณฑ์เฝ้าระวัง ให้นั่งพักอย่างน้อย 15 นาที แล้ววัดความดันโลหิตซ้ำด้วยวิธีที่ถูกต้อง หากยังพบค่าผิดปกติให้ประสานบุคลากรทางการแพทย์เพื่อประเมินต่อ'
     : 'ค่าความดันโลหิตอยู่ในเกณฑ์ที่ยังไม่ต้องติดตามเพิ่มเติม';
   let sgMsg = 'ค่าน้ำตาลอยู่ในเกณฑ์ที่ยังไม่ต้องติดตามเพิ่มเติม';
   if(sgHigh) sgMsg = 'ค่าน้ำตาลถึงเกณฑ์ติดตาม ควรปรึกษาบุคลากรทางการแพทย์เพื่อพิจารณาตรวจซ้ำ';
-  else if(f.fbs>0 && f.fasting !== 'fast8') sgMsg = 'ยังไม่ได้งดอาหารครบ 8 ชั่วโมง ควรตรวจซ้ำให้ถูกวิธี';
+  else if(f.fbs>=110 && !fast) sgMsg = 'ไม่ได้งดอาหาร 8 ชั่วโมง ให้เจาะน้ำตาลซ้ำพรุ่งนี้โดยงดอาหาร 8 ชั่วโมง';
 
   const titles = {
     normal: 'ผลคัดกรองเบื้องต้น: ปกติตามเกณฑ์',
@@ -819,7 +845,7 @@ function firstAllowedPage(){
   return PAGES.map(p => p.key).find(k => k !== 'admin' && canView(k)) || (canView('admin') ? 'admin' : 'dashboard');
 }
 function applyRights(){
-  document.querySelectorAll('.nav button[data-view]').forEach(b => { b.hidden = !allowedView(b.dataset.view); });
+  document.querySelectorAll('.nav button[data-view], .bell-btn').forEach(b => { b.hidden = !allowedView(b.dataset.view); });
   document.querySelectorAll('.nav button[data-admin]').forEach(b => { b.hidden = !canView('admin'); });
 }
 function enterApp(user){
@@ -1099,7 +1125,7 @@ $('fHeight').addEventListener('input', updateBmi);
 $('btnEval').addEventListener('click', evaluate);
 $('btnClear').addEventListener('click', clearForm);
 
-document.querySelectorAll('.nav button[data-view]').forEach(b => {
+document.querySelectorAll('.nav button[data-view], .bell-btn').forEach(b => {
   b.addEventListener('click', () => setView(b.dataset.view));
 });
 document.querySelectorAll('.nav button[data-stub]').forEach(b => {

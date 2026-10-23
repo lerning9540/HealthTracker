@@ -26,6 +26,8 @@ button,input,select,textarea{font:inherit}
 .nav button{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:10px;cursor:pointer;font-size:14px;color:#dbeee4;line-height:1.35}
 .nav button:hover{background:rgba(255,255,255,.07)}
 .nav button.active{background:var(--side-active);color:#fff;font-weight:600}
+.nav-dot{margin-left:auto;min-width:22px;height:22px;padding:0 7px;border-radius:999px;background:#e5484d;color:#fff;font-size:12px;font-weight:700;align-items:center;justify-content:center}
+.nav-dot[hidden]{display:none}
 .nav .ico{width:20px;text-align:center;flex-shrink:0}
 .side-quote{padding:20px;font-size:13px;color:#bfe0d1;text-align:center;border-top:1px solid rgba(255,255,255,.08)}
 .scrim{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:30;display:none}
@@ -107,6 +109,15 @@ td{padding:12px 10px;border-top:1px solid var(--line);vertical-align:middle}
 .sum-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:1px solid var(--line);font-size:14px}
 .sum-row:first-of-type{border-top:0}
 .sum-row b{font-size:15px}
+.ratio-row{padding:12px 0;border-top:1px solid var(--line)}
+.ratio-row:first-of-type{border-top:0}
+.ratio-head{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:14px}
+.ratio-head b{font-size:15px;white-space:nowrap}
+.ratio-track{height:8px;background:var(--line);border-radius:999px;overflow:hidden;margin-top:8px}
+.ratio-fill{height:100%;width:0;border-radius:999px;transition:width .3s}
+.f-ok{background:var(--ok)}
+.f-warn{background:#e0a03a}
+.f-bad{background:var(--bad)}
 
 .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 .step{border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center;background:#fff}
@@ -162,7 +173,7 @@ textarea{min-height:96px;resize:vertical}
   .sidebar{position:fixed;left:0;top:0;bottom:0;z-index:40;transform:translateX(-100%);transition:transform .25s}
   .sidebar.open{transform:none;box-shadow:4px 0 20px rgba(0,0,0,.25)}
   .menu-btn{display:block}
-  .topbar-right{display:none}
+  .topbar-right #whoami,.topbar-right .who-role,.topbar-right #btnLogout{display:none}
 }
 @media (max-width:600px){
   .content{padding:16px}
@@ -218,6 +229,12 @@ textarea{min-height:96px;resize:vertical}
 .topbar-right{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
 #whoami{font-weight:600;font-size:14px}
 .who-role{font-size:12px;opacity:.85}
+.day-strip{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 14px}
+.day-chip{display:inline-flex;width:38px;height:38px;border-radius:10px;align-items:center;justify-content:center;background:var(--line);color:var(--muted);font-weight:700;font-size:14px}
+.day-chip.done{background:var(--ok);color:#fff}
+.day-count{margin-left:6px;font-size:13px;font-weight:600;color:var(--ok)}
+.bell-btn{position:relative;width:40px;height:40px;border:0;border-radius:50%;background:rgba(255,255,255,.14);color:#fff;font-size:18px;cursor:pointer;margin-bottom:4px;padding:0}
+.bell-btn .nav-dot{position:absolute;top:-4px;right:-6px;min-width:20px;height:20px;padding:0 5px;font-size:11px}
 .topbar-right .btn-ghost{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.5);color:#fff;margin-top:4px}
 .row-actions{white-space:nowrap}
 .row-actions .btn-ghost+.btn-ghost{margin-left:6px}
