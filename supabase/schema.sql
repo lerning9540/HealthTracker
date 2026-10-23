@@ -58,7 +58,7 @@ create policy "admin manage users" on public.app_users
 -- ผลคัดกรอง: ผู้ที่มีสิทธิ์ form หรือ dashboard หรือ report อ่านได้ ผู้ที่มีสิทธิ์ form เพิ่มได้ แอดมินแก้และลบได้
 drop policy if exists "read records" on public.screening_records;
 create policy "read records" on public.screening_records
-  for select using (public.has_page('form') or public.has_page('dashboard') or public.has_page('report'));
+  for select using (public.has_page('form') or public.has_page('dashboard') or public.has_page('report') or public.has_page('register') or public.has_page('followup'));
 drop policy if exists "insert records" on public.screening_records;
 create policy "insert records" on public.screening_records
   for insert with check (public.has_page('form'));
@@ -67,6 +67,27 @@ create policy "admin update records" on public.screening_records
   for update using (public.is_admin()) with check (public.is_admin());
 drop policy if exists "admin delete records" on public.screening_records;
 create policy "admin delete records" on public.screening_records
+  for delete using (public.is_admin());
+
+-- การติดตามผู้มีผลสีส้มหรือสีแดง (ภายใน 7 วัน)
+create table if not exists public.follow_ups (
+  id          uuid primary key default gen_random_uuid(),
+  record_id   uuid not null references public.screening_records(id) on delete cascade,
+  visited_at  date not null,
+  result      text,
+  note        text,
+  created_by  text default (auth.jwt() ->> 'email'),
+  created_at  timestamptz not null default now()
+);
+alter table public.follow_ups enable row level security;
+drop policy if exists "read follow ups" on public.follow_ups;
+create policy "read follow ups" on public.follow_ups
+  for select using (public.has_page('followup') or public.has_page('register') or public.has_page('report'));
+drop policy if exists "insert follow ups" on public.follow_ups;
+create policy "insert follow ups" on public.follow_ups
+  for insert with check (public.has_page('followup'));
+drop policy if exists "admin delete follow ups" on public.follow_ups;
+create policy "admin delete follow ups" on public.follow_ups
   for delete using (public.is_admin());
 
 -- แอดมินคนแรก (แก้อีเมลก่อนรัน)

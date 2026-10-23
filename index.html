@@ -32,8 +32,8 @@
     <nav class="nav">
       <button class="active" data-view="dashboard"><span class="ico">⌂</span>หน้าหลัก Dashboard</button>
       <button data-view="form"><span class="ico">+</span>คัดกรองสุขภาพ</button>
-      <button data-stub="ทะเบียนประชาชนและผลคัดกรอง" data-admin><span class="ico">⚲</span>ทะเบียนประชาชนและผลคัดกรอง</button>
-      <button data-stub="ติดตามและจัดการแผน" data-admin><span class="ico">☑</span>ติดตามและจัดการแผน</button>
+      <button data-view="register"><span class="ico">⚲</span>ทะเบียนประชาชนและผลคัดกรอง</button>
+      <button data-view="followup"><span class="ico">☑</span>ติดตามและจัดการแผน</button>
       <button data-view="report"><span class="ico">▤</span>รายงานและส่งออก Excel</button>
       <button data-view="admin"><span class="ico">⚙</span>ผู้ดูแลระบบ</button>
     </nav>
@@ -322,6 +322,84 @@
       </section>
 
       <!-- REPORT -->
+      <section id="view-register" hidden>
+        <div class="page-head">
+          <div>
+            <h2>ทะเบียนประชาชนและผลคัดกรอง</h2>
+            <p>แยกกลุ่มปกติและกลุ่มเสี่ยง (สีส้มและสีแดง) พร้อมส่งออกคำตอบแบบสอบถามทั้งชุด</p>
+          </div>
+          <div class="report-actions">
+            <button class="btn btn-primary" id="regExport">⬇ ส่งออก CSV</button>
+          </div>
+        </div>
+        <div class="card filters">
+          <div class="field">
+            <label for="regSearch">ค้นหาชื่อหรือรหัส</label>
+            <input id="regSearch" type="search" placeholder="พิมพ์ชื่อหรือรหัส">
+          </div>
+        </div>
+        <div class="card">
+          <div class="preset-row">
+            <button class="btn btn-light" id="regTabNormal">กลุ่มปกติ (<span id="regNormalCount">0</span>)</button>
+            <button class="btn btn-light" id="regTabRisk">กลุ่มเสี่ยง (<span id="regRiskCount">0</span>)</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>วันที่</th><th>รหัส</th><th>ชื่อ-สกุล</th><th>อายุ</th><th>ความดัน</th><th>น้ำตาล</th><th>ผล</th></tr></thead>
+              <tbody id="regRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-followup" hidden>
+        <div class="page-head">
+          <div>
+            <h2>ติดตามและจัดการแผน</h2>
+            <p>ผู้ที่มีผลสีส้มหรือสีแดงต้องได้รับการติดตามภายใน 7 วันนับจากวันคัดกรอง</p>
+          </div>
+        </div>
+        <div class="kpis k3">
+          <div class="kpi"><div class="kpi-label">รอติดตาม</div><div class="kpi-value" id="fuPending">0</div></div>
+          <div class="kpi"><div class="kpi-label">เกินกำหนด</div><div class="kpi-value" id="fuOverdue">0</div></div>
+          <div class="kpi"><div class="kpi-label">ติดตามแล้ว</div><div class="kpi-value" id="fuDone">0</div></div>
+        </div>
+        <div class="card" id="fuCard" hidden>
+          <h3>บันทึกการติดตาม: <span id="fuName"></span></h3>
+          <div class="grid2">
+            <div class="field">
+              <label for="fuDate">วันที่ติดตาม</label>
+              <input id="fuDate" type="date">
+            </div>
+            <div class="field">
+              <label for="fuResult">ผลการติดตาม</label>
+              <select id="fuResult">
+                <option>ไม่พบความเสี่ยงเพิ่มเติม</option>
+                <option>ยังต้องติดตามซ้ำ</option>
+                <option>ส่งต่อแพทย์แล้ว</option>
+                <option>ติดตามไม่พบผู้รับการคัดกรอง</option>
+              </select>
+            </div>
+          </div>
+          <div class="field" style="margin-top:16px">
+            <label for="fuNote">หมายเหตุ</label>
+            <input id="fuNote" type="text" placeholder="เช่น นัดตรวจซ้ำอีก 2 สัปดาห์">
+          </div>
+          <div class="grid2" style="margin-top:16px">
+            <button class="btn btn-primary" id="fuSave">บันทึกการติดตาม</button>
+            <button class="btn btn-light" id="fuCancel">ยกเลิก</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>รหัส</th><th>ชื่อ-สกุล</th><th>วันคัดกรอง</th><th>ครบกำหนดติดตาม</th><th>สถานะ</th><th>การติดตามล่าสุด</th><th>จัดการ</th></tr></thead>
+              <tbody id="fuRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
       <section id="view-report" hidden>
         <div class="page-head">
           <div>
@@ -429,6 +507,8 @@
               <label class="check"><input type="checkbox" id="pg-form"> คัดกรองสุขภาพ</label>
               <label class="check"><input type="checkbox" id="pg-report"> รายงานและส่งออก</label>
               <label class="check"><input type="checkbox" id="pg-admin"> ผู้ดูแลระบบ</label>
+              <label class="check"><input type="checkbox" id="pg-register"> ทะเบียนผลคัดกรอง</label>
+              <label class="check"><input type="checkbox" id="pg-followup"> ติดตามและจัดการแผน</label>
             </div>
           </div>
 
@@ -452,6 +532,8 @@
               <label class="check"><input type="checkbox" id="eg-form"> คัดกรองสุขภาพ</label>
               <label class="check"><input type="checkbox" id="eg-report"> รายงานและส่งออก</label>
               <label class="check"><input type="checkbox" id="eg-admin"> ผู้ดูแลระบบ</label>
+              <label class="check"><input type="checkbox" id="eg-register"> ทะเบียนผลคัดกรอง</label>
+              <label class="check"><input type="checkbox" id="eg-followup"> ติดตามและจัดการแผน</label>
             </div>
           </div>
           <div class="grid2" style="margin-top:16px">
@@ -500,7 +582,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="js/supabase-config.js"></script>
 <script src="js/config.js"></script>
-<script src="js/seed.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

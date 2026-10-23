@@ -141,15 +141,140 @@ function toast(msg){
 async function loadRecordsRemote(){
   const { data, error } = await sb.from('screening_records').select('*').order('created_at');
   if(error){ toast('โหลดผลคัดกรองไม่สำเร็จ: ' + error.message); return; }
-  records = data.map(r => ({ id: r.id, code: r.code, name: r.name, age: r.age, date: r.screen_date, sbp: r.sbp, dbp: r.dbp, fbs: r.fbs }));
+  records = data.map(r => ({ id: r.id, code: r.code, name: r.name, age: r.age, date: r.screen_date, sbp: r.sbp, dbp: r.dbp, fbs: r.fbs, answers: r.answers || {} }));
+}
+
+// ---- ทะเบียนและติดตาม ----
+let followUps = [];
+let regTab = 'normal';
+
+function todayIso(){
+  const t = new Date();
+  return `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`;
+}
+function addDays(iso, n){
+  const [y, m, d] = iso.split('-').map(Number);
+  const t = new Date(y, m-1, d+n);
+  return `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`;
+}
+function isRisk(r){ return statusOf(r) !== 'normal'; }
+function latestFollowUp(recordId){
+  return followUps.filter(f => f.record_id === recordId).sort((a,b) => b.visited_at.localeCompare(a.visited_at))[0];
+}
+function followStatus(r){
+  if(latestFollowUp(r.id)) return 'done';
+  return todayIso() > addDays(r.date, 7) ? 'overdue' : 'pending';
+}
+
+async function loadFollowUps(){
+  const { data, error } = await sb.from('follow_ups').select('record_id, visited_at, result, note');
+  if(error){ toast('โหลดการติดตามไม่สำเร็จ: ' + error.message); return; }
+  followUps = data;
+}
+
+function regList(){
+  const q = $('regSearch').value.trim().toLowerCase();
+  return records
+    .filter(r => regTab === 'risk' ? isRisk(r) : !isRisk(r))
+    .filter(r => !q || (r.name || '').toLowerCase().includes(q) || (r.code || '').toLowerCase().includes(q))
+    .slice().reverse();
+}
+function renderRegister(){
+  $('regNormalCount').textContent = records.filter(r => !isRisk(r)).length;
+  $('regRiskCount').textContent = records.filter(isRisk).length;
+  $('regTabNormal').classList.toggle('btn-primary', regTab === 'normal');
+  $('regTabRisk').classList.toggle('btn-primary', regTab === 'risk');
+  const list = regList();
+  $('regRows').innerHTML = list.length ? list.map(r => {
+    const st = statusOf(r);
+    return `<tr>
+      <td>${fmtDate(r.date)}</td>
+      <td class="code">${esc(r.code)}</td>
+      <td>${esc(r.name || '')}</td>
+      <td>${esc(r.age || '-')}</td>
+      <td>${r.sbp}/${r.dbp}</td>
+      <td>${r.fbs || '-'}</td>
+      <td><span class="badge ${BADGE[st][0]}">${BADGE[st][1]}</span></td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">ไม่พบข้อมูล</td></tr>';
+}
+
+const FU_LABEL = { pending:['b-warn','รอติดตาม'], overdue:['b-bad','เกินกำหนด'], done:['b-ok','ติดตามแล้ว'] };
+function renderFollowUp(){
+  const risk = records.filter(isRisk).slice().reverse();
+  const rows = risk.map(r => ({ r, st: followStatus(r) }));
+  $('fuPending').textContent = rows.filter(x => x.st === 'pending').length;
+  $('fuOverdue').textContent = rows.filter(x => x.st === 'overdue').length;
+  $('fuDone').textContent = rows.filter(x => x.st === 'done').length;
+  $('fuRows').innerHTML = rows.length ? rows.map(({ r, st }) => {
+    const last = latestFollowUp(r.id);
+    return `<tr>
+      <td class="code">${esc(r.code)}</td>
+      <td>${esc(r.name || '')}</td>
+      <td>${fmtDate(r.date)}</td>
+      <td>${fmtDate(addDays(r.date, 7))}</td>
+      <td><span class="badge ${FU_LABEL[st][0]}">${FU_LABEL[st][1]}</span></td>
+      <td>${last ? fmtDate(last.visited_at) + ' · ' + esc(last.result) : '-'}</td>
+      <td><button class="btn-ghost" data-follow="${esc(r.id)}">บันทึกการติดตาม</button></td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">ยังไม่มีผู้ที่ต้องติดตาม</td></tr>';
+}
+
+function openFollow(id){
+  const r = records.find(x => x.id === id);
+  if(!r) return;
+  $('fuCard').dataset.record = id;
+  $('fuName').textContent = r.name || r.code;
+  $('fuDate').value = todayIso();
+  $('fuNote').value = '';
+  $('fuCard').hidden = false;
+  $('fuCard').scrollIntoView({ behavior:'smooth', block:'center' });
+}
+function closeFollow(){
+  $('fuCard').hidden = true;
+  delete $('fuCard').dataset.record;
+}
+async function saveFollow(){
+  const id = $('fuCard').dataset.record;
+  const visited_at = $('fuDate').value;
+  if(!id) return;
+  if(!visited_at){ toast('กรุณาเลือกวันที่ติดตาม'); return; }
+  const row = { record_id: id, visited_at, result: $('fuResult').value, note: $('fuNote').value.trim() };
+  const { error } = await sb.from('follow_ups').insert(row);
+  if(error){ toast('บันทึกการติดตามไม่สำเร็จ: ' + error.message); return; }
+  followUps.push(row);
+  closeFollow();
+  renderFollowUp();
+  toast('บันทึกการติดตามแล้ว');
+}
+
+// ส่งออกทะเบียนพร้อมคำตอบแบบสอบถามทั้งชุด (คอลัมน์ตามชื่อช่องในฟอร์ม)
+function exportRecordsCsv(list){
+  if(!list.length){ toast('ไม่มีข้อมูลให้ส่งออก'); return; }
+  const keys = [...new Set(list.flatMap(r => Object.keys(r.answers || {})))];
+  const head = ['วันที่','รหัส','ชื่อ-สกุล','อายุ','ความดันตัวบน','ความดันตัวล่าง','น้ำตาลในเลือด','ผลคัดกรอง', ...keys];
+  const rows = list.map(r => [fmtDate(r.date), r.code, r.name, r.age || '', r.sbp, r.dbp, r.fbs || '', BADGE[statusOf(r)][1], ...keys.map(k => (r.answers || {})[k] ?? '')]);
+  const csv = '\uFEFF' + [head, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n');
+  const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'ทะเบียนคัดกรอง_' + todayIso() + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  toast('ส่งออกไฟล์ CSV แล้ว');
 }
 
 // โหลดข้อมูลจาก Supabase หลังเข้าสู่ระบบ
 async function loadData(){
   await loadRecordsRemote();
+  await loadFollowUps();
   if(canView('admin')) await loadUsers();
   renderDashboard();
   renderAdmin();
+  renderRegister();
+  renderFollowUp();
 }
 
 function renderDashboard(){
@@ -279,7 +404,7 @@ async function evaluate(){
   }).select().single();
   if(error){ toast('บันทึกไม่สำเร็จ: ' + error.message); return; }
 
-  const rec = { id: data.id, code: data.code, name: data.name, age: data.age, date: data.screen_date, sbp: data.sbp, dbp: data.dbp, fbs: data.fbs };
+  const rec = { id: data.id, code: data.code, name: data.name, age: data.age, date: data.screen_date, sbp: data.sbp, dbp: data.dbp, fbs: data.fbs, answers: data.answers || {} };
   records.push(rec);
   renderDashboard();
   showResult(f, st);
@@ -311,7 +436,7 @@ function setView(name){
     toast('บัญชีนี้ไม่มีสิทธิ์เข้าหน้านี้');
     name = 'dashboard';
   }
-  const views = { dashboard:'view-dashboard', form:'view-form', report:'view-report', admin:'view-admin' };
+  const views = { dashboard:'view-dashboard', form:'view-form', register:'view-register', followup:'view-followup', report:'view-report', admin:'view-admin' };
   Object.entries(views).forEach(([key,id]) => { $(id).hidden = key !== name; });
   document.querySelectorAll('.nav button[data-view]').forEach(b => {
     b.classList.toggle('active', b.dataset.view === name);
@@ -325,6 +450,8 @@ function setView(name){
   if(name === 'dashboard') renderDashboard();
   if(name === 'report') renderReport();
   if(name === 'admin') renderAdmin();
+  if(name === 'register') renderRegister();
+  if(name === 'followup') renderFollowUp();
 }
 
 function openSidebar(open){
@@ -403,7 +530,9 @@ const PAGES = [
   { key:'dashboard', label:'Dashboard' },
   { key:'form',      label:'คัดกรองสุขภาพ' },
   { key:'report',    label:'รายงานและส่งออก' },
-  { key:'admin',     label:'ผู้ดูแลระบบ' }
+  { key:'admin',     label:'ผู้ดูแลระบบ' },
+  { key:'register',  label:'ทะเบียนผลคัดกรอง' },
+  { key:'followup',  label:'ติดตามและจัดการแผน' }
 ];
 const PRESET_STAFF = ['dashboard','form'];
 const PRESET_ALL = PAGES.map(p => p.key);
@@ -720,6 +849,16 @@ $('scrim').addEventListener('click', closeSidebar);
 
 $('btnSaveAlert').addEventListener('click', saveAlertForm);
 $('btnTestAlert').addEventListener('click', testAlert);
+$('regSearch').addEventListener('input', renderRegister);
+$('regTabNormal').addEventListener('click', () => { regTab = 'normal'; renderRegister(); });
+$('regTabRisk').addEventListener('click', () => { regTab = 'risk'; renderRegister(); });
+$('regExport').addEventListener('click', () => exportRecordsCsv(regList()));
+$('fuSave').addEventListener('click', saveFollow);
+$('fuCancel').addEventListener('click', closeFollow);
+$('fuRows').addEventListener('click', e => {
+  const btn = e.target.closest('[data-follow]');
+  if(btn) openFollow(btn.dataset.follow);
+});
 loadAlertForm();
 retryPendingAlerts();
 
