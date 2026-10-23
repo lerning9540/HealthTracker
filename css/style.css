@@ -173,7 +173,7 @@ textarea{min-height:96px;resize:vertical}
   .sidebar{position:fixed;left:0;top:0;bottom:0;z-index:40;transform:translateX(-100%);transition:transform .25s}
   .sidebar.open{transform:none;box-shadow:4px 0 20px rgba(0,0,0,.25)}
   .menu-btn{display:block}
-  .topbar-right #whoami,.topbar-right .who-role,.topbar-right #btnLogout{display:none}
+  .topbar-right #whoami,.topbar-right .who-role,.topbar-right .who-date,.topbar-right #btnLogout{display:none}
 }
 @media (max-width:600px){
   .content{padding:16px}
@@ -230,6 +230,8 @@ textarea{min-height:96px;resize:vertical}
 .who-box{display:flex;flex-direction:column;align-items:flex-end;gap:2px;text-align:right}
 #whoami{font-size:12px;opacity:.85}
 .topbar-right .who-role{font-weight:600;font-size:14px;opacity:1}
+.who-date{font-size:12px;opacity:.85}
+.who-date strong{font-weight:600}
 .who-role{font-size:12px;opacity:.85}
 .day-strip{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 14px}
 .day-chip{display:inline-flex;width:38px;height:38px;border-radius:10px;align-items:center;justify-content:center;background:var(--line);color:var(--muted);font-weight:700;font-size:14px}
