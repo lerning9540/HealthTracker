@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ระบบคัดกรองสุขภาพชุมชน</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="login" id="view-login" hidden>
+  <div class="login-card">
+    <div class="brand-logo login-logo">♥</div>
+    <h2>ระบบคัดกรองสุขภาพชุมชน</h2>
+    <p>กรอกชื่อผู้ใช้และรหัสผ่านที่ได้รับจากผู้ดูแลระบบ</p>
+    <form id="loginForm" class="login-form">
+      <input id="loginUser" type="text" autocomplete="username" placeholder="ชื่อผู้ใช้" required>
+      <input id="loginPass" type="password" autocomplete="current-password" placeholder="รหัสผ่าน" required>
+      <button class="btn btn-primary" type="submit">เข้าสู่ระบบ</button>
+    </form>
+    <p class="login-error" id="loginError" hidden></p>
+  </div>
+</div>
+<div class="app" id="appRoot">
+
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-logo">♥</div>
+      <div>
+        <h2>ระบบคัดกรองสุขภาพชุมชน</h2>
+        <p>หมู่ 9 ตำบลบ้านป่า</p>
+      </div>
+    </div>
+    <nav class="nav">
+      <button class="active" data-view="dashboard"><span class="ico">⌂</span>หน้าหลัก Dashboard</button>
+      <button data-view="form"><span class="ico">+</span>คัดกรองสุขภาพ</button>
+      <button data-stub="ทะเบียนประชาชนและผลคัดกรอง" data-admin><span class="ico">⚲</span>ทะเบียนประชาชนและผลคัดกรอง</button>
+      <button data-stub="ติดตามและจัดการแผน" data-admin><span class="ico">☑</span>ติดตามและจัดการแผน</button>
+      <button data-view="report"><span class="ico">▤</span>รายงานและส่งออก Excel</button>
+      <button data-view="admin"><span class="ico">⚙</span>ผู้ดูแลระบบ</button>
+    </nav>
+    <div class="side-quote">"สุขภาพดี เริ่มได้ที่ชุมชน<br>ร่วมดูแลกัน... หมู่ 9"</div>
+  </aside>
+  <div class="scrim" id="scrim"></div>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="menu-btn" id="menuBtn" aria-label="เปิดเมนู">☰</button>
+        <div>
+          <h1>ระบบคัดกรองสุขภาพชุมชน</h1>
+          <p>หมู่ 9 ตำบลบ้านป่า อำเภอเมืองพิษณุโลก จังหวัดพิษณุโลก</p>
+        </div>
+      </div>
+      <div class="topbar-right"><div id="whoami"></div><div class="who-role" id="whoRole"></div><button class="btn-ghost" id="btnLogout" hidden>ออกจากระบบ</button></div>
+    </header>
+
+    <main class="content">
+
+      <!-- DASHBOARD -->
+      <section id="view-dashboard">
+        <div class="page-head">
+          <div>
+            <h2>Dashboard ภาพรวมสุขภาพชุมชน</h2>
+            <p>ติดตามการคัดกรองและการดูแลต่อเนื่องในพื้นที่รับผิดชอบ</p>
+          </div>
+          <div class="chip">วันนี้<strong id="todayThai"></strong></div>
+        </div>
+
+        <div class="welcome">
+          <h3>ยินดีต้อนรับสู่ระบบคัดกรองสุขภาพชุมชน หมู่ 9</h3>
+          <p>ตำบลบ้านป่า อำเภอเมืองพิษณุโลก จังหวัดพิษณุโลก</p>
+          <p>ภาพรวมการคัดกรองโรคความดันโลหิตสูงและเบาหวาน พร้อมติดตามผลโดยทีมสุขภาพ</p>
+        </div>
+
+        <div class="kpis">
+          <div class="kpi"><div class="label">👥 ประชาชนทั้งหมด</div><div class="value c-brand" id="kpiPeople">0</div><div class="sub">คน · ข้อมูลตัวอย่าง</div></div>
+          <div class="kpi"><div class="label">✚ คัดกรองแล้ว</div><div class="value c-teal" id="kpiTotal">0</div><div class="sub" id="kpiTotalSub">ครั้ง</div></div>
+          <div class="kpi"><div class="label">✓ ผลปกติตามเกณฑ์</div><div class="value c-blue" id="kpiNormal">0</div><div class="sub" id="kpiNormalSub">คน</div></div>
+          <div class="kpi"><div class="label">⚠ ต้องประเมินเพิ่มเติม</div><div class="value c-orange" id="kpiRecheck">0</div><div class="sub">คน · ไม่ใช่การวินิจฉัยโรค</div></div>
+          <div class="kpi"><div class="label">✚ ควรพบแพทย์</div><div class="value c-red" id="kpiRefer">0</div><div class="sub">รายการ · ข้อมูลตัวอย่าง</div></div>
+        </div>
+
+        <div class="dash-grid">
+          <div class="card">
+            <h3>▤ รายการที่ต้องดำเนินการ</h3>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>รหัส</th><th>ชื่อ-สกุล (ตัวอย่าง)</th><th>ประเภท</th><th>สถานะ</th><th>ดำเนินการ</th></tr>
+                </thead>
+                <tbody id="todoBody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card">
+            <h3>สรุปผลคัดกรอง (ข้อมูลตัวอย่าง)</h3>
+            <div class="sum-row"><span>ผลปกติตามเกณฑ์</span><b class="c-blue" id="sumNormal">0 คน</b></div>
+            <div class="sum-row"><span>ต้องประเมินเพิ่มเติม</span><b class="c-orange" id="sumRecheck">0 คน</b></div>
+            <div class="sum-row"><span>ควรพบแพทย์</span><b class="c-red" id="sumRefer">0 รายการ</b></div>
+            <div class="sum-row"><span>ทั้งหมด</span><b id="sumTotal">0 รายการ</b></div>
+          </div>
+        </div>
+
+        <div class="card card-gap">
+          <h3>ขั้นตอนการดำเนินงานของระบบ</h3>
+          <div class="steps">
+            <div class="step"><h4>1. อสม. คัดกรอง</h4><p>บันทึกความดันและผลคัดกรองเบาหวาน</p></div>
+            <div class="step"><h4>2. ติดตามเพิ่มเติม</h4><p>Home BP หรือการตรวจซ้ำตามแผน</p></div>
+            <div class="step"><h4>3. พยาบาลประเมิน</h4><p>ทบทวนผลและกำหนดแผน</p></div>
+            <div class="step"><h4>4. ส่งต่อแพทย์</h4><p>แพทย์ประเมินและวินิจฉัย</p></div>
+            <div class="step"><h4>5. เข้าสู่การรักษา</h4><p>ดำเนินการตามแผนการรักษา</p></div>
+            <div class="step"><h4>6. ติดตามต่อเนื่อง</h4><p>บันทึกผลและปิดงานเมื่อครบแผน</p></div>
+          </div>
+        </div>
+
+        <p class="note">หมายเหตุ: ผลคัดกรองเป็นเพียงการคัดกรองเบื้องต้น ไม่ใช่การวินิจฉัยโรค ต้องให้พยาบาลทบทวนและแพทย์ประเมินตามแนวทางที่หน่วยบริการกำหนด</p>
+      </section>
+
+      <!-- FORM -->
+      <section id="view-form" hidden>
+        <div class="page-head">
+          <div>
+            <h2>คัดกรองสุขภาพ</h2>
+            <p>กรอกข้อมูลการคัดกรองความดันโลหิตและน้ำตาลในเลือด</p>
+          </div>
+        </div>
+
+        <div class="warn-banner">
+          <b>ข้อควรทราบ</b>
+          แบบฟอร์มนี้เป็นต้นแบบทดลองใช้งาน ผลคัดกรองไม่ใช่การวินิจฉัยโรค และข้อมูลที่กรอกจะเก็บไว้ในเบราว์เซอร์นี้เท่านั้น ยังไม่ได้บันทึกลงฐานข้อมูลจริง
+        </div>
+
+        <div class="form-card">
+          <h3>1. ข้อมูลประชาชน</h3>
+          <div class="field" style="margin-bottom:14px">
+            <label for="pName">ชื่อ - นามสกุล</label>
+            <input id="pName" type="text" placeholder="พิมพ์ชื่อ-นามสกุล">
+          </div>
+          <div class="grid2" style="margin-bottom:14px">
+            <div class="field">
+              <label for="pSex">เพศ</label>
+              <select id="pSex">
+                <option value="">-- เลือก --</option>
+                <option value="M">ชาย</option>
+                <option value="F">หญิง</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="pAge">อายุ (ปี)</label>
+              <input id="pAge" type="number" min="0" max="120" placeholder="เช่น 36">
+            </div>
+          </div>
+          <div class="grid2" style="margin-bottom:14px">
+            <div class="field">
+              <label for="pHouse">บ้านเลขที่</label>
+              <input id="pHouse" type="text" placeholder="เช่น 125">
+            </div>
+            <div class="field">
+              <label for="pMoo">หมู่ที่</label>
+              <input id="pMoo" type="number" min="1" max="99" placeholder="เช่น 9">
+            </div>
+          </div>
+          <div class="grid2" style="margin-bottom:14px">
+            <div class="field">
+              <label for="pTambon">ตำบล</label>
+              <input id="pTambon" type="text" placeholder="เช่น บ้านป่า">
+            </div>
+            <div class="field">
+              <label for="pAmp">อำเภอ</label>
+              <input id="pAmp" type="text" placeholder="เช่น เมืองพิษณุโลก">
+            </div>
+          </div>
+          <div class="grid2" style="margin-bottom:14px">
+            <div class="field">
+              <label for="fHistory">บุคคลในครอบครัวสายเลือดตรงป่วยเป็น</label>
+              <select id="fHistory">
+                <option value="">-- เลือก --</option>
+                <option value="none">ไม่มี</option>
+                <option value="htn">ความดันโลหิตสูง</option>
+                <option value="dm">เบาหวาน</option>
+                <option value="both">ทั้งความดันและเบาหวาน</option>
+              </select>
+            </div>
+          </div>
+<div class="grid2">
+            <div class="field">
+              <label for="fDrink">ดื่มเหล้า</label>
+              <select id="fDrink">
+                <option value="">-- เลือก --</option>
+                <option value="no">ไม่ดื่ม</option>
+                <option value="yes">ดื่ม</option>
+                <option value="quit">เคยดื่ม เลิกแล้ว</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="fSmoke">สูบบุหรี่</label>
+              <select id="fSmoke">
+                <option value="">-- เลือก --</option>
+                <option value="no">ไม่สูบ</option>
+                <option value="yes">สูบ</option>
+                <option value="quit">เคยสูบ เลิกแล้ว</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid2" style="margin-top:14px">
+            <div class="field" id="drinkYearWrap" style="display:none">
+              <label for="fDrinkYear">ดื่มเหล้า เลิกมาแล้วกี่ปี</label>
+              <input id="fDrinkYear" type="number" min="0" max="120" placeholder="จำนวนปี">
+            </div>
+            <div class="field" id="smokeYearWrap" style="display:none">
+              <label for="fSmokeYear">สูบบุหรี่ เลิกมาแล้วกี่ปี</label>
+              <input id="fSmokeYear" type="number" min="0" max="120" placeholder="จำนวนปี">
+            </div>
+          </div>
+        </div>
+
+        <div class="form-card">
+          <h3>2. วันที่และเวลาคัดกรอง</h3>
+          <div class="field" style="margin-bottom:14px">
+            <label>วันที่คัดกรอง (พ.ศ.)</label>
+            <div class="grid3">
+              <select id="fDay" aria-label="วัน"></select>
+              <select id="fMonth" aria-label="เดือน"></select>
+              <select id="fYear" aria-label="ปี พ.ศ."></select>
+            </div>
+            <small>วันที่จะแสดงเป็น พ.ศ. เช่น 22 ตุลาคม 2569</small>
+          </div>
+          <div class="field">
+            <label>เวลาที่คัดกรอง</label>
+            <div class="split">
+              <div style="display:flex;gap:8px;align-items:center">
+                <select id="fHour" aria-label="ชั่วโมง"></select>
+                <select id="fMinute" aria-label="นาที"></select>
+                <span class="unit">นาฬิกา</span>
+              </div>
+            </div>
+            <small>เลือกชั่วโมงและนาทีที่ทำการคัดกรอง</small>
+          </div>
+          <div class="field" style="margin-top:14px">
+            <label for="fScreener">ชื่อผู้คัดกรอง / อสม.</label>
+            <input id="fScreener" type="text" placeholder="พิมพ์ชื่อผู้คัดกรอง">
+          </div>
+        </div>
+
+        <div class="form-card">
+          <h3>3. น้ำหนัก ส่วนสูง และดัชนีมวลกาย</h3>
+          <div class="grid3">
+            <div class="field">
+              <label for="fWeight">น้ำหนัก (กิโลกรัม)</label>
+              <input id="fWeight" type="number" min="0" max="250" step="0.1" placeholder="เช่น 60">
+            </div>
+            <div class="field">
+              <label for="fHeight">ส่วนสูง (เซนติเมตร)</label>
+              <input id="fHeight" type="number" min="0" max="250" step="0.1" placeholder="เช่น 165">
+            </div>
+            <div class="field">
+              <label for="fBmi">ดัชนีมวลกาย (BMI)</label>
+              <input id="fBmi" type="text" readonly value="-">
+            </div>
+          </div>
+        </div>
+
+        <div class="form-card">
+          <h3>4. การคัดกรองความดันโลหิต</h3>
+          <div class="grid2">
+            <div class="field">
+              <label for="fSbp">ความดันตัวบน (มม.ปรอท)</label>
+              <input id="fSbp" type="number" min="0" max="300" placeholder="เช่น 120">
+            </div>
+            <div class="field">
+              <label for="fDbp">ความดันตัวล่าง (มม.ปรอท)</label>
+              <input id="fDbp" type="number" min="0" max="200" placeholder="เช่น 80">
+            </div>
+          </div>
+          <small style="display:block;margin-top:10px;color:var(--muted)">ควรให้ประชาชนนั่งพักก่อนวัด และวัดซ้ำตามแนวทางของหน่วยบริการเมื่อพบค่าผิดปกติ</small>
+        </div>
+
+        <div class="form-card">
+          <h3>5. การคัดกรองน้ำตาลในเลือด</h3>
+          <div class="field" style="margin-bottom:14px">
+            <label for="fFasting">ก่อนตรวจน้ำตาล ได้งดอาหารอย่างน้อย 8 ชั่วโมงหรือไม่</label>
+            <select id="fFasting">
+                <option value="">-- เลือก --</option>
+              <option value="fast8">ได้งดอาหารครบ 8 ชั่วโมง</option>
+              <option value="notfast">ไม่ได้งดอาหารครบ 8 ชั่วโมง</option>
+              <option value="unsure">ไม่แน่ใจ</option>
+            </select>
+            <small>โดยทั่วไปดื่มน้ำเปล่าได้ แต่ไม่ควรดื่มเครื่องดื่มที่มีพลังงาน</small>
+          </div>
+          <div class="field" style="margin-bottom:14px">
+            <label for="fMeal">เวลาที่รับประทานอาหารหรือเครื่องดื่มที่มีพลังงานครั้งล่าสุด</label>
+            <select id="fMeal">
+                <option value="">-- เลือก --</option>
+              <option value="unknown">จำไม่ได้</option>
+              <option value="within2">ภายใน 2 ชั่วโมง</option>
+              <option value="over2">มากกว่า 2 ชั่วโมง</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="fSugar">ระดับน้ำตาลในเลือด (มก./ดล.)</label>
+            <input id="fSugar" type="number" min="0" max="600" placeholder="เช่น 100">
+          </div>
+        </div>
+
+        <div class="form-card">
+          <h3>6. ข้อมูลเพิ่มเติม</h3>
+          <div class="field" style="margin-bottom:14px">
+            <label for="fNotes">อาการหรือข้อสังเกตเพิ่มเติม</label>
+            <textarea id="fNotes" placeholder="เช่น เวียนศีรษะ ปวดศีรษะ หรือไม่มีอาการ"></textarea>
+          </div>
+          <div class="actions">
+            <button class="btn btn-primary" id="btnEval">ประเมินผลคัดกรองเบื้องต้น</button>
+            <button class="btn btn-light" id="btnClear">ล้างข้อมูล</button>
+          </div>
+
+          <div class="result" id="result">
+            <h3 id="resultTitle"></h3>
+            <p id="resultBp"></p>
+            <p id="resultSugar"></p>
+            <p class="disclaimer">ผลนี้เป็นเพียงการคัดกรองเบื้องต้น ไม่ใช่การวินิจฉัยโรค</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- REPORT -->
+      <section id="view-report" hidden>
+        <div class="page-head">
+          <div>
+            <h2>รายงานและส่งออก</h2>
+            <p>เลือกช่วงวันที่และผลคัดกรอง แล้วส่งออกเป็นไฟล์ Excel หรือพิมพ์เป็น PDF</p>
+          </div>
+          <div class="report-actions">
+            <button class="btn btn-light" id="btnPrint">🖨 พิมพ์ / PDF</button>
+            <button class="btn btn-primary" id="btnExport">⬇ ส่งออก Excel</button>
+          </div>
+        </div>
+
+        <div class="card filters">
+          <div class="field">
+            <label for="rFrom">ตั้งแต่วันที่</label>
+            <input id="rFrom" type="date">
+          </div>
+          <div class="field">
+            <label for="rTo">ถึงวันที่</label>
+            <input id="rTo" type="date">
+          </div>
+          <div class="field">
+            <label for="rStatus">ผลคัดกรอง</label>
+            <select id="rStatus">
+              <option value="all">ทั้งหมด</option>
+              <option value="normal">ผลปกติ</option>
+              <option value="recheck">รอติดตามซ้ำ</option>
+              <option value="refer">รอพบแพทย์</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="kpis k4">
+          <div class="kpi"><div class="label">ครั้งที่คัดกรอง</div><div class="value c-teal" id="rTotal">0</div><div class="sub">ครั้ง ตามเงื่อนไข</div></div>
+          <div class="kpi"><div class="label">จำนวนคน</div><div class="value c-brand" id="rPeople">0</div><div class="sub">คน ตามเงื่อนไข</div></div>
+          <div class="kpi"><div class="label">ผลปกติ</div><div class="value c-blue" id="rNormal">0</div><div class="sub">ครั้ง</div></div>
+          <div class="kpi"><div class="label">ต้องติดตามหรือส่งต่อ</div><div class="value c-orange" id="rAbnormal">0</div><div class="sub">ครั้ง</div></div>
+        </div>
+
+        <div class="dash-grid">
+          <div class="card">
+            <h3>รายละเอียดการคัดกรอง</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>วันที่</th><th>รหัส</th><th>ชื่อ-สกุล</th><th>อายุ</th><th>ความดัน</th><th>น้ำตาล</th><th>ผล</th></tr></thead>
+                <tbody id="rDetail"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card">
+            <h3>สรุปตามผลคัดกรอง</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>ผล</th><th>จำนวน</th><th>ร้อยละ</th></tr></thead>
+                <tbody id="rSummary"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <p class="note">ไฟล์ CSV เปิดด้วย Excel ได้ทันที ภาษาไทยแสดงถูกต้อง รายงานนี้เป็นการคัดกรองเบื้องต้นเท่านั้น ไม่ใช่การวินิจฉัยโรค</p>
+      </section>
+
+      <!-- ADMIN -->
+      <section id="view-admin" hidden>
+        <div class="page-head">
+          <div>
+            <h2>ผู้ดูแลระบบ</h2>
+            <p>กำหนดว่าใครเข้าใช้งานได้ และเข้าหน้าจอไหนได้บ้าง</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>ผู้ใช้ทั้งหมด</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>ชื่อผู้ใช้</th><th>ชื่อที่แสดง</th><th>หน้าจอที่ใช้ได้</th><th>จัดการ</th></tr></thead>
+              <tbody id="adminUsers"></tbody>
+            </table>
+          </div>
+          
+        </div>
+
+        <div class="card card-gap">
+          <h3>เพิ่มผู้ใช้ใหม่</h3>
+          <div class="grid2">
+            <div class="field">
+              <label for="uName">ชื่อผู้ใช้</label>
+              <input id="uName" type="text" autocomplete="off" placeholder="เช่น asom02">
+            </div>
+            <div class="field">
+              <label for="uDisplay">ชื่อที่แสดง</label>
+              <input id="uDisplay" type="text" placeholder="เช่น สมหญิง ใจดี">
+            </div>
+            <div class="field">
+              <label for="uPass">รหัสผ่าน</label>
+              <input id="uPass" type="password" autocomplete="new-password" placeholder="ผู้ใช้ใหม่ต้องมีรหัส">
+            </div>
+          </div>
+
+          <div class="field" style="margin-top:16px">
+            <label>หน้าจอที่ใช้ได้</label>
+            <div class="preset-row">
+              <button class="btn-ghost" type="button" id="presetStaff">ชุด อสม.</button>
+              <button class="btn-ghost" type="button" id="presetAdmin">ชุดผู้ดูแล (ทุกหน้า)</button>
+            </div>
+            <div class="check-grid">
+              <label class="check"><input type="checkbox" id="pg-dashboard"> Dashboard</label>
+              <label class="check"><input type="checkbox" id="pg-form"> คัดกรองสุขภาพ</label>
+              <label class="check"><input type="checkbox" id="pg-report"> รายงานและส่งออก</label>
+              <label class="check"><input type="checkbox" id="pg-admin"> ผู้ดูแลระบบ</label>
+            </div>
+          </div>
+
+          <div class="actions" style="grid-template-columns:1fr">
+            <button class="btn btn-primary" id="btnSaveUser">บันทึกผู้ใช้</button>
+          </div>
+          <p class="note">ข้อมูลนี้บันทึกในเบราว์เซอร์เครื่องนี้เท่านั้น จนกว่าจะเชื่อมฐานข้อมูลกลาง</p>
+        </div>
+              <div class="card card-gap" id="editCard" hidden>
+          <h3>แก้ไขผู้ใช้: <span id="editTitle"></span></h3>
+          <div class="grid2">
+            <div class="field">
+              <label for="eDisplay">ชื่อที่แสดง</label>
+              <input id="eDisplay" type="text">
+            </div>
+            <div class="field">
+              <label for="ePass">รหัสผ่านใหม่ (ถ้าไม่เปลี่ยนให้เว้นว่าง)</label>
+              <input id="ePass" type="password" autocomplete="new-password" placeholder="เว้นว่างเพื่อใช้รหัสเดิม">
+            </div>
+          </div>
+          <div class="field" style="margin-top:16px">
+            <label>หน้าจอที่ใช้ได้</label>
+            <div class="check-grid">
+              <label class="check"><input type="checkbox" id="eg-dashboard"> Dashboard</label>
+              <label class="check"><input type="checkbox" id="eg-form"> คัดกรองสุขภาพ</label>
+              <label class="check"><input type="checkbox" id="eg-report"> รายงานและส่งออก</label>
+              <label class="check"><input type="checkbox" id="eg-admin"> ผู้ดูแลระบบ</label>
+            </div>
+          </div>
+          <div class="grid2" style="margin-top:16px">
+            <button class="btn btn-primary" id="btnUpdateUser">บันทึกการแก้ไข</button>
+            <button class="btn btn-light" id="btnCancelEdit">ยกเลิก</button>
+          </div>
+        </div>
+        <div class="card card-gap" id="alertCard">
+          <h3>ตั้งค่าการแจ้งเตือนทางอีเมล</h3>
+          <p class="note">เมื่อผลเป็นสีส้มหรือสีแดง ระบบจะส่งเมลไปยังอีเมลที่ตั้งไว้ด้านล่าง</p>
+          <div class="grid2">
+            <div class="field">
+              <label for="alertEmail">อีเมลที่รับแจ้งเตือน</label>
+              <input id="alertEmail" type="email" placeholder="name@example.com">
+            </div>
+            <div class="field">
+              <label for="alertSubject">หัวข้อเมล</label>
+              <input id="alertSubject" type="text">
+            </div>
+          </div>
+          <div class="grid2" style="margin-top:16px">
+            <div class="field">
+              <label for="alertUrl">URL ของ Apps Script</label>
+              <input id="alertUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec">
+            </div>
+            <div class="field">
+              <label for="alertToken">รหัสยืนยันจาก Apps Script</label>
+              <input id="alertToken" type="password" autocomplete="off">
+            </div>
+          </div>
+          <div class="grid2" style="margin-top:16px">
+            <button class="btn btn-primary" id="btnSaveAlert">บันทึกการตั้งค่า</button>
+            <button class="btn btn-light" id="btnTestAlert">ส่งเมลทดสอบ</button>
+          </div>
+          <p class="note">การตั้งค่านี้เก็บในเบราว์เซอร์เครื่องนี้ และเนื้อเมลไม่มีค่าความดันหรือน้ำตาล</p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="js/config.js"></script>
+<script src="js/seed.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
