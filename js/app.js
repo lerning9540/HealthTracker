@@ -215,7 +215,7 @@ function renderFollowUp(){
       <td>${fmtDate(addDays(r.date, 7))}</td>
       <td><span class="badge ${FU_LABEL[st][0]}">${FU_LABEL[st][1]}</span></td>
       <td>${last ? fmtDate(last.visited_at) + ' · ' + esc(last.result) : '-'}</td>
-      <td><button class="btn-ghost" data-follow="${esc(r.id)}">บันทึกการติดตาม</button></td>
+      <td>${canView('fu_record') ? `<button class="btn-ghost" data-follow="${esc(r.id)}">บันทึกการติดตาม</button>` : '-'}</td>
     </tr>`;
   }).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">ยังไม่มีผู้ที่ต้องติดตาม</td></tr>';
 }
@@ -235,6 +235,7 @@ function closeFollow(){
   delete $('fuCard').dataset.record;
 }
 async function saveFollow(){
+  if(!canView('fu_record')){ toast('บันทึกผลติดตามได้เฉพาะ อสม.'); return; }
   const id = $('fuCard').dataset.record;
   const visited_at = $('fuDate').value;
   if(!id) return;
@@ -532,7 +533,8 @@ const PAGES = [
   { key:'report',    label:'รายงานและส่งออก' },
   { key:'admin',     label:'ผู้ดูแลระบบ' },
   { key:'register',  label:'ทะเบียนผลคัดกรอง' },
-  { key:'followup',  label:'ติดตามและจัดการแผน' }
+  { key:'followup',  label:'ติดตามและจัดการแผน' },
+  { key:'fu_record', label:'บันทึกผลติดตาม (อสม.)' }
 ];
 const PRESET_STAFF = ['dashboard','form'];
 const PRESET_ALL = PAGES.map(p => p.key);

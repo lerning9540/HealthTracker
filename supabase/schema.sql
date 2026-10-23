@@ -85,7 +85,7 @@ create policy "read follow ups" on public.follow_ups
   for select using (public.has_page('followup') or public.has_page('register') or public.has_page('report'));
 drop policy if exists "insert follow ups" on public.follow_ups;
 create policy "insert follow ups" on public.follow_ups
-  for insert with check (public.has_page('followup'));
+  for insert with check (public.has_page('fu_record'));
 drop policy if exists "admin delete follow ups" on public.follow_ups;
 create policy "admin delete follow ups" on public.follow_ups
   for delete using (public.is_admin());
