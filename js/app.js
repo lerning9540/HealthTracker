@@ -195,6 +195,14 @@ function renderBp(){
   const list = bpHomeFor(id);
   const avg = bpHomeAverage(list);
   $('bpStrip').innerHTML = dayStripHtml(list);
+
+  // ให้บันทึกได้เฉพาะวันถัดไปที่ยังไม่ได้วัด โดยวันที่ล็อกเป็นวันต่อวันหลังวันคัดกรอง
+  const rec = records.find(x => x.id === id);
+  const next = [1,2,3,4,5,6,7].find(d => !list.some(x => x.day_number === d));
+  $('bpDay').innerHTML = next ? `<option value="${next}">วันที่ ${next}</option>` : '<option value="">ครบ 7 วันแล้ว</option>';
+  $('bpDate').value = next && rec ? addDays(rec.date, next) : '';
+  $('bpDate').disabled = true;
+  $('bpSave').disabled = !next;
   $('bpRows').innerHTML = [1,2,3,4,5,6,7].map(day => {
     const hits = list.filter(x => x.day_number === day);
     const last = hits[hits.length - 1];
@@ -274,6 +282,24 @@ async function saveNurse(){
   toast('บันทึกสถานะแล้ว');
 }
 $('nsSave').addEventListener('click', saveNurse);
+
+// ผู้ดูแลระบบแก้วันที่คัดกรอง วันที่ของ BP Home จะคำนวณตามวันนี้ใหม่อัตโนมัติ
+async function saveScreenDate(){
+  if(!canView('admin')){ toast('เฉพาะผู้ดูแลระบบแก้วันที่ได้'); return; }
+  const r = records.find(x => x.id === currentPatientId);
+  const date = $('pdDate').value;
+  if(!r || !date) return;
+  const { error } = await sb.from('screening_records').update({ screen_date: date }).eq('id', r.id);
+  if(error){ toast('บันทึกวันที่ไม่สำเร็จ: ' + error.message); return; }
+  r.date = date;
+  renderPatient();
+  if(!$('bpCard').hidden) renderBp();
+  renderDashboard();
+  renderRegister();
+  renderFollowUp();
+  toast('บันทึกวันที่คัดกรองแล้ว');
+}
+$('pdDateSave').addEventListener('click', saveScreenDate);
 $('blSave').addEventListener('click', saveLog);
 
 // ---- การแจ้งเตือน ----
@@ -392,6 +418,8 @@ function renderPatient(){
   $('nsStatus').value = r.nurse_status || 'pending_review';
   $('nsNote').value = r.nurse_note || '';
   $('nsSave').hidden = !canView('followup');
+  $('pdDateCard').hidden = !canView('admin');
+  $('pdDate').value = r.date;
   $('nsStatus').disabled = !canView('followup');
   $('nsNote').disabled = !canView('followup');
   $('blDate').value = todayIso();
@@ -409,8 +437,15 @@ $('pdBack').addEventListener('click', () => setView('register'));
 let followUps = [];
 let regFilter = 'all';
 
+// วันที่ของระบบ: ถ้าผู้ดูแลตั้งวันที่ทดสอบไว้ ทุกช่องวันที่จะใช้วันนั้นแทนวันจริง
+let systemDate = null;
+function todayDate(){
+  if(!systemDate) return new Date();
+  const [y, m, d] = systemDate.split('-').map(Number);
+  return new Date(y, m-1, d, 12);
+}
 function todayIso(){
-  const t = new Date();
+  const t = todayDate();
   return `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`;
 }
 function addDays(iso, n){
@@ -535,7 +570,33 @@ function exportRecordsCsv(list){
 }
 
 // โหลดข้อมูลจาก Supabase หลังเข้าสู่ระบบ
+async function loadSystemDate(){
+  const { data, error } = await sb.from('app_settings').select('value').eq('key', 'system_date').maybeSingle();
+  systemDate = (!error && data && data.value) ? data.value : null;
+  renderTodayChip();
+  renderSystemDate();
+}
+function renderSystemDate(){
+  $('sysDate').value = systemDate || todayIso();
+  $('sysDateNote').textContent = systemDate ? 'กำลังใช้วันที่ทดสอบ ทุกช่องวันที่จะใช้วันนี้' : 'กำลังใช้วันที่จริงของเครื่อง';
+}
+async function saveSystemDate(value){
+  const { error } = await sb.from('app_settings').upsert({ key: 'system_date', value: value || null });
+  if(error){ toast('บันทึกวันที่ไม่สำเร็จ: ' + error.message); return; }
+  systemDate = value || null;
+  renderTodayChip();
+  renderSystemDate();
+  renderDashboard();
+  renderRegister();
+  renderFollowUp();
+  if(!$('view-patient').hidden) renderPatient();
+  toast(value ? 'ตั้งวันที่ของระบบแล้ว' : 'กลับไปใช้วันที่จริงแล้ว');
+}
+$('sysDateSave').addEventListener('click', () => saveSystemDate($('sysDate').value));
+$('sysDateReset').addEventListener('click', () => saveSystemDate(null));
+
 async function loadData(){
+  await loadSystemDate();
   await loadRecordsRemote();
   await loadFollowUps();
   await loadBpHome();
@@ -600,7 +661,7 @@ function renderDashboard(){
 }
 
 function setDefaults(){
-  const d = new Date();
+  const d = todayDate();
   $('fDay').value = d.getDate();
   $('fMonth').value = d.getMonth();
   $('fYear').value = d.getFullYear() + 543;
@@ -1122,10 +1183,11 @@ $('adminUsers').addEventListener('click', e => {
 
 // ---- init ----
 applyRights();
-$('todayThai').textContent = (() => {
-  const d = new Date();
-  return `${d.getDate()} ${TH_MONTHS[d.getMonth()]} ${d.getFullYear()+543}`;
-})();
+function renderTodayChip(){
+  const d = todayDate();
+  $('todayThai').textContent = `${d.getDate()} ${TH_MONTHS[d.getMonth()]} ${d.getFullYear()+543}`;
+}
+renderTodayChip();
 
 $('fDay').innerHTML = range(1,31).map(d => opt(d, pad(d))).join('');
 $('fMonth').innerHTML = TH_MONTHS.map((m,i) => opt(i, m)).join('');

@@ -480,6 +480,14 @@
           </div>
         </div>
         <div class="kpis" id="pdKpis"></div>
+        <div class="card card-gap" id="pdDateCard" hidden>
+          <h3>วันที่คัดกรอง (แก้ไขได้เฉพาะผู้ดูแลระบบ)</h3>
+          <div class="field">
+            <label for="pdDate">วันที่คัดกรอง</label>
+            <input id="pdDate" type="date">
+          </div>
+          <button class="btn btn-primary" id="pdDateSave">บันทึกวันที่</button>
+        </div>
         <div class="card card-gap">
           <h3>สถานะและหมายเหตุของพยาบาล</h3>
           <div class="grid2">
@@ -622,6 +630,21 @@
           <div>
             <h2>ผู้ดูแลระบบ</h2>
             <p>กำหนดว่าใครเข้าใช้งานได้ และเข้าหน้าจอไหนได้บ้าง</p>
+          </div>
+        </div>
+
+        <div class="card card-gap">
+          <h3>วันที่ของระบบ (สำหรับทดสอบ)</h3>
+          <div class="grid2">
+            <div class="field">
+              <label for="sysDate">ตั้งวันที่ของระบบ</label>
+              <input id="sysDate" type="date">
+            </div>
+          </div>
+          <p class="muted small" id="sysDateNote"></p>
+          <div class="report-actions">
+            <button class="btn btn-primary" id="sysDateSave">ใช้วันที่นี้</button>
+            <button class="btn btn-light" id="sysDateReset">กลับไปใช้วันที่จริง</button>
           </div>
         </div>
 
