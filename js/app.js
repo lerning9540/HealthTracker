@@ -572,9 +572,13 @@ function renderDashboard(){
   $('thUrgentBar').style.width = pct(counts.refer) + '%';
   updateNotifyBadge();
 
-  $('sumNormal').textContent = counts.normal + ' คน';
-  $('sumRecheck').textContent = counts.recheck + ' คน';
-  $('sumRefer').textContent = counts.refer + ' รายการ';
+  const pctOf = n => total ? Math.round(n / total * 100) : 0;
+  $('sumNormal').textContent = `${counts.normal} ราย (${pctOf(counts.normal)}%)`;
+  $('sumRecheck').textContent = `${counts.recheck} ราย (${pctOf(counts.recheck)}%)`;
+  $('sumRefer').textContent = `${counts.refer} ราย (${pctOf(counts.refer)}%)`;
+  $('sumNormalBar').style.width = pctOf(counts.normal) + '%';
+  $('sumRecheckBar').style.width = pctOf(counts.recheck) + '%';
+  $('sumReferBar').style.width = pctOf(counts.refer) + '%';
   $('sumTotal').textContent = total + ' รายการ';
 
   const todo = records.filter(r => statusOf(r) !== 'normal').slice().reverse().slice(0,5);

@@ -91,15 +91,15 @@
           <h3>สัดส่วนการประเมินทางคลินิก (OR Logic)</h3>
           <p class="muted small">จำแนกตามเกณฑ์ที่ได้รับ ความดันหรือน้ำตาลข้อใดข้อหนึ่งเข้าเกณฑ์ก็จัดกลุ่มนั้น</p>
           <div class="ratio-row">
-            <div class="ratio-head"><span><span class="badge b-ok">ปกติ</span> &lt;140 และ &lt;90 mmHg, น้ำตาลงดอาหาร &lt;126</span><b class="c-blue" id="thNormal"></b></div>
+            <div class="ratio-head"><span><span class="badge b-ok">ปกติ</span></span><b class="c-blue" id="thNormal"></b></div>
             <div class="ratio-track"><div class="ratio-fill f-ok" id="thNormalBar"></div></div>
           </div>
           <div class="ratio-row">
-            <div class="ratio-head"><span><span class="badge b-warn">กลุ่มสงสัยป่วย</span> 140–179 หรือ 90–109 mmHg, น้ำตาลงดอาหาร 8 ชม. ≥126</span><b class="c-orange" id="thSuspect"></b></div>
+            <div class="ratio-head"><span><span class="badge b-warn">กลุ่มสงสัยป่วย</span></span><b class="c-orange" id="thSuspect"></b></div>
             <div class="ratio-track"><div class="ratio-fill f-warn" id="thSuspectBar"></div></div>
           </div>
           <div class="ratio-row">
-            <div class="ratio-head"><span><span class="badge b-bad">ระดับอันตราย</span> ≥180 หรือ ≥110 mmHg (ส่งพบแพทย์ทันที)</span><b class="c-red" id="thUrgent"></b></div>
+            <div class="ratio-head"><span><span class="badge b-bad">ระดับอันตราย</span></span><b class="c-red" id="thUrgent"></b></div>
             <div class="ratio-track"><div class="ratio-fill f-bad" id="thUrgentBar"></div></div>
           </div>
         </div>
@@ -110,17 +110,26 @@
             <div class="table-wrap">
               <table>
                 <thead>
-                  <tr><th>รหัส</th><th>ชื่อ-สกุล (ตัวอย่าง)</th><th>ประเภท</th><th>สถานะ</th><th>ดำเนินการ</th></tr>
+                  <tr><th>รหัส</th><th>ชื่อ-สกุล</th><th>ประเภท</th><th>สถานะ</th><th>ดำเนินการ</th></tr>
                 </thead>
                 <tbody id="todoBody"></tbody>
               </table>
             </div>
           </div>
           <div class="card">
-            <h3>สรุปผลคัดกรอง (ข้อมูลตัวอย่าง)</h3>
-            <div class="sum-row"><span>ผลปกติตามเกณฑ์</span><b class="c-blue" id="sumNormal">0 คน</b></div>
-            <div class="sum-row"><span>ต้องประเมินเพิ่มเติม</span><b class="c-orange" id="sumRecheck">0 คน</b></div>
-            <div class="sum-row"><span>ควรพบแพทย์</span><b class="c-red" id="sumRefer">0 รายการ</b></div>
+            <h3>สรุปผลคัดกรอง</h3>
+            <div class="ratio-row">
+              <div class="ratio-head"><span><span class="badge b-ok">ปกติ</span> ตามเกณฑ์</span><b class="c-blue" id="sumNormal"></b></div>
+              <div class="ratio-track"><div class="ratio-fill f-ok" id="sumNormalBar"></div></div>
+            </div>
+            <div class="ratio-row">
+              <div class="ratio-head"><span><span class="badge b-warn">กลุ่มสงสัยป่วย</span> ต้องประเมินเพิ่มเติม</span><b class="c-orange" id="sumRecheck"></b></div>
+              <div class="ratio-track"><div class="ratio-fill f-warn" id="sumRecheckBar"></div></div>
+            </div>
+            <div class="ratio-row">
+              <div class="ratio-head"><span><span class="badge b-bad">ระดับอันตราย</span> ควรพบแพทย์</span><b class="c-red" id="sumRefer"></b></div>
+              <div class="ratio-track"><div class="ratio-fill f-bad" id="sumReferBar"></div></div>
+            </div>
             <div class="sum-row"><span>ทั้งหมด</span><b id="sumTotal">0 รายการ</b></div>
           </div>
         </div>
