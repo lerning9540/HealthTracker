@@ -347,6 +347,7 @@
           </div>
 
           <div class="result" id="result">
+            <p id="resultSaved" style="color:#1f7a3a;font-weight:600"></p>
             <h3 id="resultTitle"></h3>
             <p id="resultBp"></p>
             <p id="resultSugar"></p>
@@ -487,6 +488,11 @@
             <input id="pdDate" type="date">
           </div>
           <button class="btn btn-primary" id="pdDateSave">บันทึกวันที่</button>
+        </div>
+        <div class="card card-gap" id="pdDeleteCard" hidden>
+          <h3>ลบข้อมูลผู้รับการคัดกรองนี้ (เฉพาะผู้ดูแลระบบ)</h3>
+          <p class="note">ใช้เมื่อกรอกข้อมูลผิด การลบจะลบผลคัดกรอง การติดตาม และการวัดความดันของรายนี้ทั้งหมด และไม่สามารถกู้คืนได้</p>
+          <button class="btn btn-primary" id="pdDelete" style="background:#dc2626">ลบข้อมูลรายนี้</button>
         </div>
         <div class="card card-gap">
           <h3>สถานะและหมายเหตุของพยาบาล</h3>

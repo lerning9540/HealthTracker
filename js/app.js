@@ -37,7 +37,7 @@ const ALERT_LOG_KEY = 'alert_log_v1';
 const ALERT_SUBJECT_DEFAULT = '[คัดกรองสุขภาพ] มีผู้รับการคัดกรองที่ต้องติดตาม';
 
 function getAlertSettings(){
-  const base = { email:'', subject: ALERT_SUBJECT_DEFAULT, url:'', token:'' };
+  const base = { email:'', subject: ALERT_SUBJECT_DEFAULT };
   try{ return Object.assign(base, JSON.parse(localStorage.getItem(ALERT_KEY) || '{}')); }
   catch(e){ return base; }
 }
@@ -76,17 +76,16 @@ function appendAlertLog(entry){
 }
 
 async function sendAlert(msg){
-  const s = getAlertSettings();
   if(!isValidEmail(msg.to)) return { ok:false, error:'ยังไม่ได้ตั้งอีเมลแจ้งเตือน' };
-  if(!s.url) return { ok:false, error:'ยังไม่ได้ตั้ง URL ของ Apps Script' };
+  if(!alertServer.url) return { ok:false, error:'ยังไม่ได้ตั้ง URL ของ Apps Script ในฐานข้อมูล' };
   let ok = false, error = '';
   try{
     // ใช้ text/plain และ no-cors เพื่อหลีกเลี่ยงการตรวจ CORS ล่วงหน้า (ผลตอบกลับอ่านไม่ได้ จึงถือว่าส่งแล้วถ้าไม่มี error)
-    await fetch(s.url, {
+    await fetch(alertServer.url, {
       method: 'POST',
       mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ token: s.token, to: msg.to, subject: msg.subject, body: msg.body })
+      body: JSON.stringify({ token: alertServer.token, to: msg.to, subject: msg.subject, body: msg.body })
     });
     ok = true;
   }catch(e){ error = 'เชื่อมต่อ Apps Script ไม่ได้'; }
@@ -112,17 +111,13 @@ function loadAlertForm(){
   const s = getAlertSettings();
   $('alertEmail').value = s.email;
   $('alertSubject').value = s.subject;
-  $('alertUrl').value = s.url;
-  $('alertToken').value = s.token;
 }
 function saveAlertForm(){
   const email = $('alertEmail').value.trim();
   if(email && !isValidEmail(email)){ toast('รูปแบบอีเมลไม่ถูกต้อง'); return false; }
   const s = {
     email,
-    subject: $('alertSubject').value.trim() || ALERT_SUBJECT_DEFAULT,
-    url: $('alertUrl').value.trim(),
-    token: $('alertToken').value
+    subject: $('alertSubject').value.trim() || ALERT_SUBJECT_DEFAULT
   };
   const saved = saveAlertSettings(s);
   toast(saved ? 'บันทึกการตั้งค่าแจ้งเตือนแล้ว' : 'บันทึกไม่สำเร็จ');
@@ -300,6 +295,21 @@ async function saveScreenDate(){
   toast('บันทึกวันที่คัดกรองแล้ว');
 }
 $('pdDateSave').addEventListener('click', saveScreenDate);
+
+// ลบผลคัดกรองที่กรอกผิด (ผู้ดูแลระบบเท่านั้น) ตารางลูกจะถูกลบตามด้วย on delete cascade
+async function deletePatient(){
+  if(!canView('admin')){ toast('เฉพาะผู้ดูแลระบบลบข้อมูลได้'); return; }
+  const r = records.find(x => x.id === currentPatientId);
+  if(!r) return;
+  if(!confirm(`ลบข้อมูลของ ${r.name || '-'} (${r.code}) ใช่หรือไม่? การลบไม่สามารถย้อนกลับได้`)) return;
+  const { error } = await sb.from('screening_records').delete().eq('id', r.id);
+  if(error){ toast('ลบไม่สำเร็จ: ' + error.message); return; }
+  currentPatientId = null;
+  await loadData();
+  setView('register');
+  toast('ลบข้อมูลแล้ว');
+}
+$('pdDelete').addEventListener('click', deletePatient);
 $('blSave').addEventListener('click', saveLog);
 
 // ---- การแจ้งเตือน ----
@@ -419,6 +429,7 @@ function renderPatient(){
   $('nsNote').value = r.nurse_note || '';
   $('nsSave').hidden = !canView('followup');
   $('pdDateCard').hidden = !canView('admin');
+  $('pdDeleteCard').hidden = !canView('admin');
   $('pdDate').value = r.date;
   $('nsStatus').disabled = !canView('followup');
   $('nsNote').disabled = !canView('followup');
@@ -595,8 +606,20 @@ async function saveSystemDate(value){
 $('sysDateSave').addEventListener('click', () => saveSystemDate($('sysDate').value));
 $('sysDateReset').addEventListener('click', () => saveSystemDate(null));
 
+// URL และรหัสยืนยันของ Apps Script เก็บในตาราง app_settings ไม่แสดงบนหน้าจอ
+let alertServer = { url: '', token: '' };
+async function loadAlertServer(){
+  const { data, error } = await sb.from('app_settings').select('key, value').in('key', ['alert_url', 'alert_token']);
+  if(error || !data) return;
+  alertServer = {
+    url: (data.find(x => x.key === 'alert_url') || {}).value || '',
+    token: (data.find(x => x.key === 'alert_token') || {}).value || ''
+  };
+}
+
 async function loadData(){
   await loadSystemDate();
+  await loadAlertServer();
   await loadRecordsRemote();
   await loadFollowUps();
   await loadBpHome();
@@ -674,7 +697,7 @@ function fillMock(){
   // ค่าตัวอย่างแสดงเป็น placeholder (ตัวอักษรจาง) ช่องยังว่างอยู่ พิมพ์ทับได้เลย
   const hints = {
     pName:'ตัวอย่าง ใจดี', pAge:'36', pHouse:'125', pMoo:'9',
-    pTambon:'บ้านป่า', pAmp:'เมืองพิษณุโลก', fScreener:'ตัวอย่าง อสม.',
+    pTambon:'บ้านป่า', pAmp:'เมืองพิษณุโลก',
     fWeight:'85', fHeight:'175', fSbp:'165', fDbp:'98', fSugar:'156'
   };
   Object.entries(hints).forEach(([id,v]) => { $(id).placeholder = v; });
@@ -735,11 +758,32 @@ function collectForm(){
   return out;
 }
 
+// กันการบันทึกซ้ำ: ปิดปุ่มระหว่างบันทึก และปิดอีกครั้งจนกว่าจะแก้ไขฟอร์ม
+let evalBusy = false;
+let lastSavedKey = null;
+
+function setEvalEnabled(on){ $('btnEval').disabled = !on; }
+
+['input', 'change'].forEach(ev => $('view-form').addEventListener(ev, () => {
+  if(lastSavedKey !== null){
+    lastSavedKey = null;
+    $('resultSaved').textContent = '';
+    setEvalEnabled(true);
+  }
+}));
+
 async function evaluate(){
+  if(evalBusy) return;
   const f = readForm();
   if(!f.name){ toast('กรุณากรอกชื่อ-นามสกุล'); return; }
   if(!f.sbp || !f.dbp){ toast('กรุณากรอกค่าความดันโลหิต'); return; }
 
+  const answers = collectForm();
+  const key = JSON.stringify(answers);
+  if(key === lastSavedKey){ toast('บันทึกสำเร็จแล้ว หากต้องการบันทึกใหม่ให้แก้ไขข้อมูลก่อน'); return; }
+
+  evalBusy = true;
+  setEvalEnabled(false);
   const st = statusOf(f);
   const { data, error } = await sb.from('screening_records').insert({
     code: 'REC-' + pad(records.length + 1),
@@ -747,15 +791,23 @@ async function evaluate(){
     age: parseInt(f.age, 10) || null,
     screen_date: f.date,
     sbp: Math.round(f.sbp), dbp: Math.round(f.dbp), fbs: Math.round(f.fbs) || null,
-    answers: collectForm()
+    answers
   }).select().single();
-  if(error){ toast('บันทึกไม่สำเร็จ: ' + error.message); return; }
+  evalBusy = false;
+  if(error){
+    setEvalEnabled(true);
+    toast('บันทึกไม่สำเร็จ: ' + error.message);
+    return;
+  }
 
   const rec = { id: data.id, code: data.code, name: data.name, age: data.age, date: data.screen_date, sbp: data.sbp, dbp: data.dbp, fbs: data.fbs, answers: data.answers || {} };
   records.push(rec);
+  lastSavedKey = key;
   renderDashboard();
   showResult(f, st);
-  toast('บันทึกผลคัดกรองเรียบร้อยแล้ว');
+  $('resultSaved').textContent = 'บันทึกสำเร็จแล้ว (รหัส ' + rec.code + ')';
+  setEvalEnabled(false);
+  toast('บันทึกสำเร็จแล้ว');
   maybeAlert(rec);
 }
 
@@ -774,6 +826,9 @@ function clearForm(){
     el.selectedIndex = 0;
   });
   $('result').classList.remove('show');
+  $('resultSaved').textContent = '';
+  lastSavedKey = null;
+  setEvalEnabled(true);
   setDefaults();
   toggleQuitYears();
 }
@@ -920,6 +975,9 @@ function enterApp(user){
   $('appRoot').hidden = false;
   $('whoami').textContent = user.name;
   $('whoRole').textContent = user.pages.includes('admin') ? 'ผู้ดูแลระบบ' : 'ผู้ใช้งาน';
+  // ชื่อผู้คัดกรองคือผู้ที่เข้าระบบอยู่ตอนนั้น แก้ไม่ได้
+  $('fScreener').value = user.name;
+  $('fScreener').readOnly = true;
   $('btnLogout').hidden = false;
   applyRights();
 }
