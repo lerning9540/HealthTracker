@@ -770,6 +770,7 @@ function setEvalEnabled(on){ $('btnEval').disabled = !on; }
     $('resultSaved').textContent = '';
     setEvalEnabled(true);
   }
+  $('btnClear').style.display = '';
 }));
 
 async function evaluate(){
@@ -806,6 +807,8 @@ async function evaluate(){
   renderDashboard();
   showResult(f, st);
   $('resultSaved').textContent = 'บันทึกสำเร็จแล้ว (รหัส ' + rec.code + ')';
+  clearFields();
+  $('btnClear').style.display = 'none';
   setEvalEnabled(false);
   toast('บันทึกสำเร็จแล้ว');
   maybeAlert(rec);
@@ -816,7 +819,8 @@ function toggleQuitYears(){
   $('smokeYearWrap').style.display = $('fSmoke').value === 'quit' ? '' : 'none';
 }
 
-function clearForm(){
+// ล้างค่าในช่องกรอกทั้งหมด (ไม่แตะกล่องผลลัพธ์)
+function clearFields(){
   document.querySelectorAll('#view-form input, #view-form textarea').forEach(el => {
     if(el.id === 'fBmi') return;
     el.value = '';
@@ -825,12 +829,17 @@ function clearForm(){
     if(['fDay','fMonth','fYear','fHour','fMinute'].includes(el.id)) return;
     el.selectedIndex = 0;
   });
+  setDefaults();
+  toggleQuitYears();
+}
+
+function clearForm(){
+  clearFields();
   $('result').classList.remove('show');
   $('resultSaved').textContent = '';
   lastSavedKey = null;
   setEvalEnabled(true);
-  setDefaults();
-  toggleQuitYears();
+  $('btnClear').style.display = '';
 }
 
 function allowedView(name){
