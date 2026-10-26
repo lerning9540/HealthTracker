@@ -95,12 +95,20 @@
             <div class="ratio-track"><div class="ratio-fill f-ok" id="thNormalBar"></div></div>
           </div>
           <div class="ratio-row">
-            <div class="ratio-head"><span><span class="badge b-warn">กลุ่มสงสัยป่วย</span></span><b class="c-orange" id="thSuspect"></b></div>
-            <div class="ratio-track"><div class="ratio-fill f-warn" id="thSuspectBar"></div></div>
+            <div class="ratio-head"><span><span class="badge b-warn">สงสัยป่วยความดันโลหิตสูง</span></span><b class="c-orange" id="thHtnSuspect"></b></div>
+            <div class="ratio-track"><div class="ratio-fill f-warn" id="thHtnSuspectBar"></div></div>
           </div>
           <div class="ratio-row">
-            <div class="ratio-head"><span><span class="badge b-bad">ระดับอันตราย</span></span><b class="c-red" id="thUrgent"></b></div>
-            <div class="ratio-track"><div class="ratio-fill f-bad" id="thUrgentBar"></div></div>
+            <div class="ratio-head"><span><span class="badge b-warn">สงสัยป่วยเบาหวาน</span></span><b class="c-orange" id="thDmSuspect"></b></div>
+            <div class="ratio-track"><div class="ratio-fill f-warn" id="thDmSuspectBar"></div></div>
+          </div>
+          <div class="ratio-row">
+            <div class="ratio-head"><span><span class="badge b-bad">กลุ่มผู้ป่วยรายเก่าความดันสูง</span></span><b class="c-red" id="thOldHtn"></b></div>
+            <div class="ratio-track"><div class="ratio-fill f-bad" id="thOldHtnBar"></div></div>
+          </div>
+          <div class="ratio-row">
+            <div class="ratio-head"><span><span class="badge b-bad">กลุ่มผู้ป่วยรายเก่าเบาหวาน</span></span><b class="c-red" id="thOldDm"></b></div>
+            <div class="ratio-track"><div class="ratio-fill f-bad" id="thOldDmBar"></div></div>
           </div>
         </div>
 
@@ -131,6 +139,22 @@
               <div class="ratio-track"><div class="ratio-fill f-bad" id="sumReferBar"></div></div>
             </div>
             <div class="sum-row"><span>ทั้งหมด</span><b id="sumTotal">0 รายการ</b></div>
+          </div>
+        </div>
+
+        <div class="card card-gap">
+          <h3>การงดน้ำ อาหารก่อนตรวจน้ำตาล</h3>
+          <div class="ratio-row">
+            <div class="ratio-head"><span>งดครบ 8 ชั่วโมง</span><b class="c-blue" id="fastYes"></b></div>
+            <div class="ratio-track"><div class="ratio-fill f-ok" id="fastYesBar"></div></div>
+          </div>
+          <div class="ratio-row">
+            <div class="ratio-head"><span>ไม่ได้งดครบ 8 ชั่วโมง</span><b class="c-orange" id="fastNo"></b></div>
+            <div class="ratio-track"><div class="ratio-fill f-warn" id="fastNoBar"></div></div>
+          </div>
+          <div class="ratio-row">
+            <div class="ratio-head"><span>ไม่แน่ใจ / ยังไม่ระบุ</span><b class="c-red" id="fastUnknown"></b></div>
+            <div class="ratio-track"><div class="ratio-fill f-bad" id="fastUnknownBar"></div></div>
           </div>
         </div>
 
@@ -513,7 +537,7 @@
         </div>
         <div class="card card-gap">
           <h3>บันทึกความดันรายครั้ง</h3>
-          <p class="note">หมายเหตุ: วัดด้วยเครื่องเดิม คนเดิม และเวลาเดิมทุกครั้ง (วันละไม่เกิน 4 ครั้ง)</p>
+          <p class="note">หมายเหตุ: วัดด้วยเครื่องเดิม คนเดิม และเวลาเดิมทุกครั้ง (ช่วงเช้าไม่เกิน 2 ครั้ง และช่วงเย็นไม่เกิน 2 ครั้ง)</p>
           <div class="grid2">
             <div class="field"><label for="blDate">วันที่วัด</label><input id="blDate" type="date"></div>
             <div class="field"><label for="blTime">เวลาที่วัด</label><input id="blTime" type="time"></div>

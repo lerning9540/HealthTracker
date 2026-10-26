@@ -237,12 +237,15 @@ async function loadBpLogs(){
   if(error){ toast('โหลดบันทึกความดันไม่สำเร็จ: ' + error.message); return; }
   bpLogs = data;
 }
-const BP_LOG_MAX_PER_DAY = 4;
+// วันละไม่เกิน 2 ครั้งช่วงเช้า และ 2 ครั้งช่วงเย็น โดยแยกช่วงจากเวลาที่วัด (ก่อน 12:00 = เช้า)
+const BP_LOG_MAX_PER_SESSION = 2;
+function sessionOf(time){ return time.slice(0, 5) < '12:00' ? 'เช้า' : 'เย็น'; }
 function renderLogs(){
   const day = $('blDate').value;
   const list = bpLogs.filter(x => x.record_id === currentPatientId).slice().reverse();
-  const todayCount = list.filter(x => x.measured_at === day).length;
-  $('blCount').textContent = `วันที่เลือกบันทึกแล้ว ${todayCount} / ${BP_LOG_MAX_PER_DAY} ครั้ง`;
+  const dayRows = list.filter(x => x.measured_at === day && x.measured_time);
+  const morning = dayRows.filter(x => sessionOf(x.measured_time) === 'เช้า').length;
+  $('blCount').textContent = `วันที่เลือก: เช้า ${morning} / ${BP_LOG_MAX_PER_SESSION} ครั้ง · เย็น ${dayRows.length - morning} / ${BP_LOG_MAX_PER_SESSION} ครั้ง`;
   $('blRows').innerHTML = list.length ? list.map(x => `<tr>
       <td>${fmtDate(x.measured_at)}</td><td>${x.measured_time ? esc(x.measured_time.slice(0, 5)) : esc(x.session || '-')}</td><td>${x.systolic}/${x.diastolic}</td>
     </tr>`).join('') : '<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px">ยังไม่มีการบันทึก</td></tr>';
@@ -256,8 +259,9 @@ async function saveLog(){
   if(!sys || !dia){ toast('กรุณากรอกค่าความดันให้ครบ'); return; }
   if(!measured_at){ toast('กรุณาเลือกวันที่วัด'); return; }
   if(!measured_time){ toast('กรุณาเลือกเวลาที่วัด'); return; }
-  const dayCount = bpLogs.filter(x => x.record_id === currentPatientId && x.measured_at === measured_at).length;
-  if(dayCount >= BP_LOG_MAX_PER_DAY){ toast(`วันที่เลือกบันทึกครบ ${BP_LOG_MAX_PER_DAY} ครั้งแล้ว`); return; }
+  const session = sessionOf(measured_time);
+  const sameSession = bpLogs.filter(x => x.record_id === currentPatientId && x.measured_at === measured_at && x.measured_time && sessionOf(x.measured_time) === session).length;
+  if(sameSession >= BP_LOG_MAX_PER_SESSION){ toast(`วันที่เลือกบันทึกช่วง${session}ครบ ${BP_LOG_MAX_PER_SESSION} ครั้งแล้ว`); return; }
   const row = { record_id: currentPatientId, measured_at, measured_time, systolic: sys, diastolic: dia };
   const { error } = await sb.from('bp_logs').insert(row);
   if(error){ toast('บันทึกไม่สำเร็จ: ' + error.message); return; }
@@ -411,6 +415,8 @@ function trendSvg(r, list){
   <p class="note" style="margin-top:6px">● <span style="color:#0f766e">ความดันตัวบน</span> · ● <span style="color:#2563eb">ความดันตัวล่าง</span></p>`;
 }
 
+const FAST_LABEL = { fast8: 'งดครบ 8 ชม.', notfast: 'ไม่ได้งดครบ 8 ชม.', unsure: 'ไม่แน่ใจ' };
+const MEAL_LABEL = { unknown: 'จำไม่ได้', within2: 'ภายใน 2 ชม.', over2: 'มากกว่า 2 ชม.' };
 function renderPatient(){
   const r = records.find(x => x.id === currentPatientId);
   if(!r){ setView('register'); return; }
@@ -424,7 +430,8 @@ function renderPatient(){
     <div class="kpi"><div class="label">ความดันแรกรับ</div><div class="value c-brand">${r.sbp}/${r.dbp}</div><div class="sub">mmHg</div></div>
     <div class="kpi"><div class="label">น้ำตาลในเลือด</div><div class="value c-teal">${r.fbs || '-'}</div><div class="sub">mg/dL</div></div>
     <div class="kpi"><div class="label">ค่าเฉลี่ย BP Home</div><div class="value ${avg && avg.elevated ? 'c-red' : 'c-blue'}">${avg ? avg.sys + '/' + avg.dia : '-'}</div><div class="sub">${avg ? avg.days + ' วันที่วัด' : 'ยังไม่มีข้อมูล'}</div></div>
-    <div class="kpi"><div class="label">การติดตามล่าสุด</div><div class="value c-orange" style="font-size:18px">${fus[0] ? fmtDate(fus[0].visited_at) : '-'}</div><div class="sub">${fus[0] ? esc(fus[0].result) : 'ยังไม่มีการติดตาม'}</div></div>`;
+    <div class="kpi"><div class="label">การติดตามล่าสุด</div><div class="value c-orange" style="font-size:18px">${fus[0] ? fmtDate(fus[0].visited_at) : '-'}</div><div class="sub">${fus[0] ? esc(fus[0].result) : 'ยังไม่มีการติดตาม'}</div></div>
+    <div class="kpi"><div class="label">การงดน้ำ อาหาร</div><div class="value c-teal" style="font-size:18px">${FAST_LABEL[r.answers.fFasting] || '-'}</div><div class="sub">${r.answers.fFasting === 'fast8' ? 'ไม่ต้องถามเวลาทานอาหาร' : (MEAL_LABEL[r.answers.fMeal] ? 'ทานครั้งล่าสุด ' + MEAL_LABEL[r.answers.fMeal] : 'ไม่ได้บันทึกเวลาทานอาหาร')}</div></div>`;
   $('pdStrip').innerHTML = dayStripHtml(list);
   $('pdChart').innerHTML = trendSvg(r, list);
   $('nsStatus').innerHTML = NURSE_STATUS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
@@ -657,12 +664,24 @@ function renderDashboard(){
   $('kpiSeven').textContent = seven.length;
   $('kpiUrgent').textContent = new Set([...records.filter(r => statusOf(r) === 'refer'), ...overdue].map(r => r.id)).size;
   const pct = n => total ? Math.round(n / total * 100) : 0;
-  $('thNormal').textContent = `${counts.normal} ราย (${pct(counts.normal)}%)`;
-  $('thSuspect').textContent = `${counts.recheck} ราย (${pct(counts.recheck)}%)`;
-  $('thUrgent').textContent = `${counts.refer} ราย (${pct(counts.refer)}%)`;
-  $('thNormalBar').style.width = pct(counts.normal) + '%';
-  $('thSuspectBar').style.width = pct(counts.recheck) + '%';
-  $('thUrgentBar').style.width = pct(counts.refer) + '%';
+  // สัดส่วนทางคลินิก: รายเก่า (มีโรคประจำตัว) ก่อน แล้วจึงแยกผู้สงสัยป่วยตามค่าที่ผิดปกติ
+  // คนที่เป็นรายเก่าทั้งความดันและเบาหวาน นับในกลุ่มความดันโลหิตสูงกลุ่มเดียว
+  const grp = { normal:0, htnSuspect:0, dmSuspect:0, oldHtn:0, oldDm:0 };
+  records.forEach(r => {
+    const a = r.answers || {};
+    const bpAbnormal = r.sbp >= 140 || r.dbp >= 90;
+    const sugarAbnormal = sugarRisk(r) || needsRetest(r);
+    if(a.fDxHtn) grp.oldHtn++;
+    else if(a.fDxDm) grp.oldDm++;
+    else if(bpAbnormal) grp.htnSuspect++;
+    else if(sugarAbnormal) grp.dmSuspect++;
+    else grp.normal++;
+  });
+  [['thNormal', grp.normal], ['thHtnSuspect', grp.htnSuspect], ['thDmSuspect', grp.dmSuspect], ['thOldHtn', grp.oldHtn], ['thOldDm', grp.oldDm]]
+    .forEach(([id, n]) => {
+      $(id).textContent = `${n} ราย (${pct(n)}%)`;
+      $(id + 'Bar').style.width = pct(n) + '%';
+    });
   updateNotifyBadge();
 
   const pctOf = n => total ? Math.round(n / total * 100) : 0;
@@ -673,6 +692,21 @@ function renderDashboard(){
   $('sumRecheckBar').style.width = pctOf(counts.recheck) + '%';
   $('sumReferBar').style.width = pctOf(counts.refer) + '%';
   $('sumTotal').textContent = total + ' รายการ';
+
+  // การงดน้ำ อาหาร: งดครบ / ไม่ได้งด / ไม่แน่ใจหรือยังไม่ระบุ
+  const fast = { yes:0, no:0, unknown:0 };
+  records.forEach(r => {
+    const v = (r.answers || {}).fFasting;
+    if(v === 'fast8') fast.yes++;
+    else if(v === 'notfast') fast.no++;
+    else fast.unknown++;
+  });
+  $('fastYes').textContent = `${fast.yes} ราย (${pctOf(fast.yes)}%)`;
+  $('fastNo').textContent = `${fast.no} ราย (${pctOf(fast.no)}%)`;
+  $('fastUnknown').textContent = `${fast.unknown} ราย (${pctOf(fast.unknown)}%)`;
+  $('fastYesBar').style.width = pctOf(fast.yes) + '%';
+  $('fastNoBar').style.width = pctOf(fast.no) + '%';
+  $('fastUnknownBar').style.width = pctOf(fast.unknown) + '%';
 
   const todo = records.filter(r => statusOf(r) !== 'normal').slice().reverse().slice(0,5);
   const body = $('todoBody');
