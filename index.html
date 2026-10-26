@@ -81,7 +81,7 @@
 
         <div class="kpis">
           <div class="kpi"><div class="label">✚ คัดกรองแล้ว</div><div class="value c-brand" id="kpiScreened">0</div><div class="sub">ราย</div></div>
-          <div class="kpi"><div class="label">⚠ กลุ่มสงสัยป่วย</div><div class="value c-orange" id="kpiSuspect">0</div><div class="sub">ราย</div></div>
+          <div class="kpi"><div class="label">⚠ ต้องติดตาม</div><div class="value c-orange" id="kpiSuspect">0</div><div class="sub">ราย</div></div>
           <div class="kpi"><div class="label">◷ กำลังติดตาม</div><div class="value c-blue" id="kpiTracking">0</div><div class="sub">ราย · รอการติดตาม</div></div>
           <div class="kpi"><div class="label">✓ ติดตามครบ 7 วัน</div><div class="value c-teal" id="kpiSeven">0</div><div class="sub">ราย</div></div>
           <div class="kpi"><div class="label">‼ ด่วน / ขาดการวัด</div><div class="value c-red" id="kpiUrgent">0</div><div class="sub">ราย</div></div>
@@ -122,7 +122,7 @@
             <div class="table-wrap">
               <table>
                 <thead>
-                  <tr><th>รหัส</th><th>ชื่อ-สกุล</th><th>ประเภท</th><th>สถานะ</th><th>ดำเนินการ</th></tr>
+                  <tr><th>รหัส</th><th>ชื่อ-สกุล</th><th>ประเภท</th><th>ผลประเมินทางคลินิก</th><th>สถานะ</th><th>ดำเนินการ</th></tr>
                 </thead>
                 <tbody id="todoBody"></tbody>
               </table>
@@ -417,12 +417,12 @@
           <div class="preset-row">
             <button class="btn btn-light btn-primary" data-filter="all" id="regFilterAll">ทั้งหมด (<span id="cntAll">0</span>)</button>
             <button class="btn btn-light" data-filter="normal" id="regFilterNormal">ปกติ (<span id="cntNormal">0</span>)</button>
-            <button class="btn btn-light" data-filter="recheck" id="regFilterRecheck">สงสัยป่วย (<span id="cntRecheck">0</span>)</button>
+            <button class="btn btn-light" data-filter="recheck" id="regFilterRecheck">ต้องติดตาม (<span id="cntRecheck">0</span>)</button>
             <button class="btn btn-light" data-filter="refer" id="regFilterRefer">เร่งด่วน (<span id="cntRefer">0</span>)</button>
           </div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>วันที่</th><th>รหัส</th><th>ชื่อ-สกุล</th><th>อายุ</th><th>ความดัน</th><th>น้ำตาล</th><th>ผล</th><th>จัดการ</th></tr></thead>
+              <thead><tr><th>วันที่</th><th>รหัส</th><th>ชื่อ-สกุล</th><th>อายุ</th><th>ความดัน</th><th>น้ำตาล</th><th>ผลประเมินทางคลินิก</th><th>ผล</th><th>จัดการ</th></tr></thead>
               <tbody id="regRows"></tbody>
             </table>
           </div>
@@ -631,9 +631,9 @@
             <label for="rStatus">ผลคัดกรอง</label>
             <select id="rStatus">
               <option value="all">ทั้งหมด</option>
-              <option value="normal">ผลปกติ</option>
-              <option value="recheck">รอติดตามซ้ำ</option>
-              <option value="refer">รอพบแพทย์</option>
+              <option value="normal">ปกติ</option>
+              <option value="recheck">ต้องติดตาม</option>
+              <option value="refer">เร่งด่วน</option>
             </select>
           </div>
         </div>

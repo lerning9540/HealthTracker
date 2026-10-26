@@ -16,20 +16,45 @@ const fmtDate = iso => { const [y,m,d] = iso.split('-').map(Number); return `${d
 // น้ำตาลไม่ได้งดอาหาร ≥110 ให้เจาะซ้ำพรุ่งนี้โดยงดอาหาร 8 ชม.
 function sugarRisk(r){ return r.fbs>=126 && (r.answers || {}).fFasting === 'fast8'; }
 function needsRetest(r){ return r.fbs>=110 && (r.answers || {}).fFasting !== 'fast8'; }
-function statusOf(r){
-  if(r.sbp>=180 || r.dbp>=110) return 'refer';
-  if((r.sbp>=140 && r.sbp<=179) || (r.dbp>=90 && r.dbp<=109) || sugarRisk(r)) return 'recheck';
+// ความดันตามเกณฑ์โครงการ (ไฟล์เกณฑ์): ต้องเข้าเกณฑ์ SBP และ DBP พร้อมกัน
+// เร่งด่วน = SBP ≥180 และ DBP ≥110 | สงสัยป่วย = SBP 140–170 และ DBP 90–109 | นอกนั้นยังไม่เข้าเกณฑ์
+function bpLevel(r){
+  if(r.sbp>=180 && r.dbp>=110) return 'refer';
+  if(r.sbp>=140 && r.dbp>=90) return 'recheck';
   return 'normal';
 }
+// สถานะกลาง ใช้ร่วมกันทั้งระบบ (การ์ด ตัวกรอง กระดิ่ง อีเมล กล่องผลลัพธ์ รายงาน)
+// เร่งด่วน = ความดัน ≥180/≥110 | ต้องติดตาม = ค่าผิดปกติข้อใดข้อหนึ่ง (ความดัน ≥140/≥90, น้ำตาลงดอาหาร ≥126, น้ำตาลไม่งดอาหาร ≥110)
+function statusOf(r){
+  const bp = bpLevel(r);
+  if(bp === 'refer') return 'refer';
+  if(bp === 'recheck' || sugarRisk(r) || needsRetest(r)) return 'recheck';
+  return 'normal';
+}
+// กลุ่มทางคลินิก: รายเก่า (มีโรคประจำตัว) ก่อน แล้วจึงแยกผู้สงสัยป่วยตามค่าที่ผิดปกติ
+// ใช้ร่วมกันทั้งการ์ดสัดส่วน การ์ดสรุป หน้าหลัก ทะเบียน และไฟล์ Excel
+const CLINICAL_LABEL = { normal:'ปกติ', htnSuspect:'สงสัยป่วยความดันโลหิตสูง', dmSuspect:'สงสัยป่วยเบาหวาน', bothSuspect:'สงสัยป่วยทั้งสองโรค', oldHtn:'รายเก่าความดันโลหิตสูง', oldDm:'รายเก่าเบาหวาน' };
+function clinicalOf(r){
+  const a = r.answers || {};
+  const bpAbnormal = bpLevel(r) !== 'normal';
+  const sugarAbnormal = sugarRisk(r) || needsRetest(r);
+  let key = 'normal';
+  if(a.fDxHtn) key = 'oldHtn';
+  else if(a.fDxDm) key = 'oldDm';
+  else if(bpAbnormal && sugarAbnormal) key = 'bothSuspect';
+  else if(bpAbnormal) key = 'htnSuspect';
+  else if(sugarAbnormal) key = 'dmSuspect';
+  return { key, label: CLINICAL_LABEL[key] };
+}
 function typeOf(r){
-  const bp = r.sbp>=140 || r.dbp>=90;
+  const bp = bpLevel(r) !== 'normal';
   const sg = sugarRisk(r);
   if(bp && sg) return 'ความดัน/เบาหวาน';
   if(bp) return 'ความดันโลหิต';
   if(sg) return 'เบาหวาน';
   return '-';
 }
-const BADGE = { normal:['b-ok','ผลปกติ'], recheck:['b-warn','รอติดตามซ้ำ'], refer:['b-bad','รอพบแพทย์'] };
+const BADGE = { normal:['b-ok','ปกติ'], recheck:['b-warn','ต้องติดตาม'], refer:['b-bad','เร่งด่วน'] };
 
 // ---- แจ้งเตือนทางอีเมล ----
 // การตั้งค่าแจ้งเตือน (URL, รหัสยืนยัน, อีเมลผู้รับ, หัวข้อ) เก็บในตาราง app_settings ให้ทุกเครื่องใช้ร่วมกัน
@@ -43,7 +68,7 @@ function isValidEmail(s){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s); }
 function needsAlert(r){ return statusOf(r) !== 'normal'; }
 
 function buildAlertMessage(r, st){
-  const label = st === 'refer' ? 'รอพบแพทย์ (สีแดง)' : 'รอติดตามซ้ำ (สีส้ม)';
+  const label = st === 'refer' ? 'เร่งด่วน (สีแดง)' : 'ต้องติดตาม (สีส้ม)';
   const lines = [
     'มีผู้รับการคัดกรองที่ต้องติดตาม',
     '',
@@ -517,10 +542,11 @@ function renderRegister(){
       <td>${esc(r.age || '-')}</td>
       <td>${r.sbp}/${r.dbp}</td>
       <td>${r.fbs || '-'}</td>
+      <td>${esc(clinicalOf(r).label)}</td>
       <td><span class="badge ${BADGE[st][0]}">${BADGE[st][1]}</span></td>
       <td><button class="btn-ghost" data-detail="${esc(r.id)}">ดูรายละเอียด</button></td>
     </tr>`;
-  }).join('') : '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px">ไม่พบข้อมูล</td></tr>';
+  }).join('') : '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:20px">ไม่พบข้อมูล</td></tr>';
 }
 
 const FU_LABEL = { pending:['b-warn','รอติดตาม'], overdue:['b-bad','เกินกำหนด'], done:['b-ok','ติดตามแล้ว'] };
@@ -577,8 +603,22 @@ async function saveFollow(){
 function exportRecordsCsv(list){
   if(!list.length){ toast('ไม่มีข้อมูลให้ส่งออก'); return; }
   const keys = [...new Set(list.flatMap(r => Object.keys(r.answers || {})))];
-  const head = ['วันที่','รหัส','ชื่อ-สกุล','อายุ','ความดันตัวบน','ความดันตัวล่าง','น้ำตาลในเลือด','ผลคัดกรอง', ...keys];
-  const rows = list.map(r => [fmtDate(r.date), r.code, r.name, r.age || '', r.sbp, r.dbp, r.fbs || '', BADGE[statusOf(r)][1], ...keys.map(k => (r.answers || {})[k] ?? '')]);
+  const extra = ['ผลการประเมินทางคลินิก','การงดน้ำ อาหาร','เวลาทานอาหารล่าสุด'];
+  const head = ['วันที่','รหัส','ชื่อ-สกุล','อายุ','ความดันตัวบน','ความดันตัวล่าง','น้ำตาลในเลือด','ผลคัดกรอง', ...extra, ...keys];
+  // ค่าที่เป็นข้อความตัวเลือกแปลงเป็นภาษาไทย และค่าจริง/เท็จเป็น ใช่/ไม่ใช่ ให้อ่านใน Excel ได้
+  const show = (k, v) => {
+    if(v === true) return 'ใช่';
+    if(v === false) return 'ไม่ใช่';
+    if(Array.isArray(v)) return v.join(' / ');
+    if(k === 'fFasting') return FAST_LABEL[v] || v || '';
+    if(k === 'fMeal') return MEAL_LABEL[v] || v || '';
+    return v ?? '';
+  };
+  const rows = list.map(r => {
+    const a = r.answers || {};
+    return [fmtDate(r.date), r.code, r.name, r.age || '', r.sbp, r.dbp, r.fbs || '', BADGE[statusOf(r)][1],
+      clinicalOf(r).label, FAST_LABEL[a.fFasting] || '', MEAL_LABEL[a.fMeal] || '', ...keys.map(k => show(k, a[k]))];
+  });
   const csv = '\uFEFF' + [head, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n');
   const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
   const a = document.createElement('a');
@@ -664,20 +704,9 @@ function renderDashboard(){
   $('kpiSeven').textContent = seven.length;
   $('kpiUrgent').textContent = new Set([...records.filter(r => statusOf(r) === 'refer'), ...overdue].map(r => r.id)).size;
   const pct = n => total ? Math.round(n / total * 100) : 0;
-  // สัดส่วนทางคลินิก: รายเก่า (มีโรคประจำตัว) ก่อน แล้วจึงแยกผู้สงสัยป่วยตามค่าที่ผิดปกติ
-  // คนที่เป็นรายเก่าทั้งความดันและเบาหวาน นับในกลุ่มความดันโลหิตสูงกลุ่มเดียว
+  // สัดส่วนทางคลินิก (คนที่เป็นรายเก่าทั้งความดันและเบาหวาน นับในกลุ่มความดันโลหิตสูงกลุ่มเดียว)
   const grp = { normal:0, htnSuspect:0, dmSuspect:0, bothSuspect:0, oldHtn:0, oldDm:0 };
-  records.forEach(r => {
-    const a = r.answers || {};
-    const bpAbnormal = r.sbp >= 140 || r.dbp >= 90;
-    const sugarAbnormal = sugarRisk(r) || needsRetest(r);
-    if(a.fDxHtn) grp.oldHtn++;
-    else if(a.fDxDm) grp.oldDm++;
-    else if(bpAbnormal && sugarAbnormal) grp.bothSuspect++;
-    else if(bpAbnormal) grp.htnSuspect++;
-    else if(sugarAbnormal) grp.dmSuspect++;
-    else grp.normal++;
-  });
+  records.forEach(r => grp[clinicalOf(r).key]++);
   [['thNormal', grp.normal], ['thHtnSuspect', grp.htnSuspect], ['thDmSuspect', grp.dmSuspect], ['thBothSuspect', grp.bothSuspect], ['thOldHtn', grp.oldHtn], ['thOldDm', grp.oldDm]]
     .forEach(([id, n]) => {
       $(id).textContent = `${n} ราย (${pct(n)}%)`;
@@ -712,7 +741,7 @@ function renderDashboard(){
   const todo = records.filter(r => statusOf(r) !== 'normal').slice().reverse().slice(0,5);
   const body = $('todoBody');
   if(!todo.length){
-    body.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">ไม่มีรายการที่ต้องดำเนินการ</td></tr>';
+    body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">ไม่มีรายการที่ต้องดำเนินการ</td></tr>';
     return;
   }
   body.innerHTML = todo.map(r => {
@@ -721,6 +750,7 @@ function renderDashboard(){
       <td class="code">${esc(r.code)}</td>
       <td class="pname">${esc(r.name)}<small>${fmtDate(r.date)}</small></td>
       <td>${esc(typeOf(r))}</td>
+      <td>${esc(clinicalOf(r).label)}</td>
       <td><span class="badge ${BADGE[st][0]}">${BADGE[st][1]}</span></td>
       <td><button class="btn-ghost" data-detail="${esc(r.id)}">ดูรายการ</button></td>
     </tr>`;
@@ -770,7 +800,7 @@ function readForm(){
 }
 
 function showResult(f, st){
-  const bpHigh = f.sbp>=140 || f.dbp>=90;
+  const bpHigh = bpLevel(f) !== 'normal';
   const fast = f.fasting === 'fast8';
   const sgHigh = f.fbs>=126 && fast;
   const bpMsg = bpHigh
