@@ -1015,8 +1015,12 @@ function csvCell(v){
 function exportCsv(){
   const list = filteredRecords();
   if(!list.length){ toast('ไม่มีข้อมูลให้ส่งออก'); return; }
-  const head = ['วันที่','รหัส','ชื่อ-สกุล','อายุ','ความดันตัวบน','ความดันตัวล่าง','น้ำตาลในเลือด','ผลคัดกรอง'];
-  const rows = list.map(r => [fmtDate(r.date), r.code, r.name, r.age || '', r.sbp, r.dbp, r.fbs || '', BADGE[statusOf(r)][1]]);
+  const head = ['วันที่','รหัส','ชื่อ-สกุล','อายุ','ความดันตัวบน','ความดันตัวล่าง','น้ำตาลในเลือด','ผลคัดกรอง','ผลการประเมินทางคลินิก','การงดน้ำ อาหาร','เวลาทานอาหารล่าสุด'];
+  const rows = list.map(r => {
+    const a = r.answers || {};
+    return [fmtDate(r.date), r.code, r.name, r.age || '', r.sbp, r.dbp, r.fbs || '', BADGE[statusOf(r)][1],
+      clinicalOf(r).label, FAST_LABEL[a.fFasting] || '', MEAL_LABEL[a.fMeal] || ''];
+  });
   // \uFEFF = BOM ทำให้ Excel อ่านภาษาไทยถูกต้อง
   const csv = '\uFEFF' + [head, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n');
   const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
