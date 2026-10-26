@@ -32,26 +32,17 @@ function typeOf(r){
 const BADGE = { normal:['b-ok','ผลปกติ'], recheck:['b-warn','รอติดตามซ้ำ'], refer:['b-bad','รอพบแพทย์'] };
 
 // ---- แจ้งเตือนทางอีเมล ----
-const ALERT_KEY = 'alert_settings_v1';
+// การตั้งค่าแจ้งเตือน (URL, รหัสยืนยัน, อีเมลผู้รับ, หัวข้อ) เก็บในตาราง app_settings ให้ทุกเครื่องใช้ร่วมกัน
 const ALERT_LOG_KEY = 'alert_log_v1';
 const ALERT_SUBJECT_DEFAULT = '[คัดกรองสุขภาพ] มีผู้รับการคัดกรองที่ต้องติดตาม';
+const ALERT_MAX_RECIPIENTS = 2;
 
-function getAlertSettings(){
-  const base = { email:'', subject: ALERT_SUBJECT_DEFAULT };
-  try{ return Object.assign(base, JSON.parse(localStorage.getItem(ALERT_KEY) || '{}')); }
-  catch(e){ return base; }
-}
-function saveAlertSettings(s){
-  try{ localStorage.setItem(ALERT_KEY, JSON.stringify(s)); return true; }
-  catch(e){ return false; }
-}
 function isValidEmail(s){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s); }
 
 // สีส้ม = รอติดตามซ้ำ (recheck) สีแดง = รอพบแพทย์ (refer)
 function needsAlert(r){ return statusOf(r) !== 'normal'; }
 
 function buildAlertMessage(r, st){
-  const s = getAlertSettings();
   const label = st === 'refer' ? 'รอพบแพทย์ (สีแดง)' : 'รอติดตามซ้ำ (สีส้ม)';
   const lines = [
     'มีผู้รับการคัดกรองที่ต้องติดตาม',
@@ -62,7 +53,7 @@ function buildAlertMessage(r, st){
     '',
     'กรุณาเข้าระบบเพื่อดูรายละเอียด'
   ];
-  return { to: s.email, subject: s.subject, body: lines.join('\n'), recordId: r.id, status: st };
+  return { to: alertServer.emails.join(','), subject: alertServer.subject, body: lines.join('\n'), recordId: r.id, status: st };
 }
 
 function readAlertLog(){
@@ -76,7 +67,7 @@ function appendAlertLog(entry){
 }
 
 async function sendAlert(msg){
-  if(!isValidEmail(msg.to)) return { ok:false, error:'ยังไม่ได้ตั้งอีเมลแจ้งเตือน' };
+  if(!msg.to || !msg.to.split(',').every(isValidEmail)) return { ok:false, error:'ยังไม่ได้ตั้งอีเมลแจ้งเตือน' };
   if(!alertServer.url) return { ok:false, error:'ยังไม่ได้ตั้ง URL ของ Apps Script ในฐานข้อมูล' };
   let ok = false, error = '';
   try{
@@ -108,25 +99,29 @@ function retryPendingAlerts(){
 }
 
 function loadAlertForm(){
-  const s = getAlertSettings();
-  $('alertEmail').value = s.email;
-  $('alertSubject').value = s.subject;
+  $('alertEmail1').value = alertServer.emails[0] || '';
+  $('alertEmail2').value = alertServer.emails[1] || '';
+  $('alertSubject').value = alertServer.subject;
 }
-function saveAlertForm(){
-  const email = $('alertEmail').value.trim();
-  if(email && !isValidEmail(email)){ toast('รูปแบบอีเมลไม่ถูกต้อง'); return false; }
-  const s = {
-    email,
-    subject: $('alertSubject').value.trim() || ALERT_SUBJECT_DEFAULT
-  };
-  const saved = saveAlertSettings(s);
-  toast(saved ? 'บันทึกการตั้งค่าแจ้งเตือนแล้ว' : 'บันทึกไม่สำเร็จ');
-  return saved;
+async function saveAlertForm(){
+  if(!canView('admin')){ toast('เฉพาะผู้ดูแลระบบบันทึกการตั้งค่าได้'); return false; }
+  const emails = [$('alertEmail1').value, $('alertEmail2').value].map(s => s.trim()).filter(Boolean);
+  if(!emails.length){ toast('กรุณากรอกอีเมลอย่างน้อย 1 อีเมล'); return false; }
+  if(emails.length > ALERT_MAX_RECIPIENTS || !emails.every(isValidEmail)){ toast('รูปแบบอีเมลไม่ถูกต้อง หรือกรอกเกิน ' + ALERT_MAX_RECIPIENTS + ' อีเมล'); return false; }
+  const subject = $('alertSubject').value.trim() || ALERT_SUBJECT_DEFAULT;
+  const { error } = await sb.from('app_settings').upsert([
+    { key: 'alert_emails', value: emails.join(',') },
+    { key: 'alert_subject', value: subject }
+  ]);
+  if(error){ toast('บันทึกไม่สำเร็จ: ' + error.message); return false; }
+  alertServer.emails = emails;
+  alertServer.subject = subject;
+  toast('บันทึกการตั้งค่าแจ้งเตือนแล้ว');
+  return true;
 }
 async function testAlert(){
-  if(!saveAlertForm()) return;
-  const s = getAlertSettings();
-  const res = await sendAlert({ to: s.email, subject: '[ทดสอบ] ' + s.subject, body: 'นี่คืออีเมลทดสอบจากระบบคัดกรองสุขภาพ', recordId: 'TEST', status: 'test' });
+  if(!await saveAlertForm()) return;
+  const res = await sendAlert({ to: alertServer.emails.join(','), subject: '[ทดสอบ] ' + alertServer.subject, body: 'นี่คืออีเมลทดสอบจากระบบคัดกรองสุขภาพ', recordId: 'TEST', status: 'test' });
   toast(res.ok ? 'ส่งเมลทดสอบแล้ว ตรวจสอบกล่องจดหมาย' : 'ส่งไม่สำเร็จ: ' + res.error);
 }
 
@@ -238,14 +233,18 @@ const NURSE_STATUS = [
 ];
 let bpLogs = [];
 async function loadBpLogs(){
-  const { data, error } = await sb.from('bp_logs').select('record_id, measured_at, session, systolic, diastolic').order('measured_at');
+  const { data, error } = await sb.from('bp_logs').select('record_id, measured_at, measured_time, session, systolic, diastolic').order('measured_at');
   if(error){ toast('โหลดบันทึกความดันไม่สำเร็จ: ' + error.message); return; }
   bpLogs = data;
 }
+const BP_LOG_MAX_PER_DAY = 4;
 function renderLogs(){
+  const day = $('blDate').value;
   const list = bpLogs.filter(x => x.record_id === currentPatientId).slice().reverse();
+  const todayCount = list.filter(x => x.measured_at === day).length;
+  $('blCount').textContent = `วันที่เลือกบันทึกแล้ว ${todayCount} / ${BP_LOG_MAX_PER_DAY} ครั้ง`;
   $('blRows').innerHTML = list.length ? list.map(x => `<tr>
-      <td>${fmtDate(x.measured_at)}</td><td>${esc(x.session)}</td><td>${x.systolic}/${x.diastolic}</td>
+      <td>${fmtDate(x.measured_at)}</td><td>${x.measured_time ? esc(x.measured_time.slice(0, 5)) : esc(x.session || '-')}</td><td>${x.systolic}/${x.diastolic}</td>
     </tr>`).join('') : '<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px">ยังไม่มีการบันทึก</td></tr>';
 }
 async function saveLog(){
@@ -253,9 +252,13 @@ async function saveLog(){
   const sys = parseInt($('blSys').value, 10);
   const dia = parseInt($('blDia').value, 10);
   const measured_at = $('blDate').value;
+  const measured_time = $('blTime').value;
   if(!sys || !dia){ toast('กรุณากรอกค่าความดันให้ครบ'); return; }
   if(!measured_at){ toast('กรุณาเลือกวันที่วัด'); return; }
-  const row = { record_id: currentPatientId, measured_at, session: $('blSession').value, systolic: sys, diastolic: dia };
+  if(!measured_time){ toast('กรุณาเลือกเวลาที่วัด'); return; }
+  const dayCount = bpLogs.filter(x => x.record_id === currentPatientId && x.measured_at === measured_at).length;
+  if(dayCount >= BP_LOG_MAX_PER_DAY){ toast(`วันที่เลือกบันทึกครบ ${BP_LOG_MAX_PER_DAY} ครั้งแล้ว`); return; }
+  const row = { record_id: currentPatientId, measured_at, measured_time, systolic: sys, diastolic: dia };
   const { error } = await sb.from('bp_logs').insert(row);
   if(error){ toast('บันทึกไม่สำเร็จ: ' + error.message); return; }
   bpLogs.push(row);
@@ -434,6 +437,7 @@ function renderPatient(){
   $('nsStatus').disabled = !canView('followup');
   $('nsNote').disabled = !canView('followup');
   $('blDate').value = todayIso();
+  $('blTime').value = new Date().toTimeString().slice(0, 5);
   $('blSys').value = '';
   $('blDia').value = '';
   $('blSave').hidden = !canView('fu_record');
@@ -606,20 +610,25 @@ async function saveSystemDate(value){
 $('sysDateSave').addEventListener('click', () => saveSystemDate($('sysDate').value));
 $('sysDateReset').addEventListener('click', () => saveSystemDate(null));
 
-// URL และรหัสยืนยันของ Apps Script เก็บในตาราง app_settings ไม่แสดงบนหน้าจอ
-let alertServer = { url: '', token: '' };
+// URL และรหัสยืนยันของ Apps Script ไม่แสดงบนหน้าจอ
+let alertServer = { url: '', token: '', emails: [], subject: ALERT_SUBJECT_DEFAULT };
 async function loadAlertServer(){
-  const { data, error } = await sb.from('app_settings').select('key, value').in('key', ['alert_url', 'alert_token']);
+  const keys = ['alert_url', 'alert_token', 'alert_emails', 'alert_subject'];
+  const { data, error } = await sb.from('app_settings').select('key, value').in('key', keys);
   if(error || !data) return;
+  const val = k => (data.find(x => x.key === k) || {}).value || '';
   alertServer = {
-    url: (data.find(x => x.key === 'alert_url') || {}).value || '',
-    token: (data.find(x => x.key === 'alert_token') || {}).value || ''
+    url: val('alert_url'),
+    token: val('alert_token'),
+    emails: val('alert_emails').split(',').map(s => s.trim()).filter(Boolean),
+    subject: val('alert_subject') || ALERT_SUBJECT_DEFAULT
   };
 }
 
 async function loadData(){
   await loadSystemDate();
   await loadAlertServer();
+  loadAlertForm();
   await loadRecordsRemote();
   await loadFollowUps();
   await loadBpHome();
@@ -820,11 +829,23 @@ function toggleQuitYears(){
 }
 
 // ล้างค่าในช่องกรอกทั้งหมด (ไม่แตะกล่องผลลัพธ์)
+// ถ้างดอาหาร 8 ชั่วโมงแล้ว ไม่ต้องถามเวลารับประทานอาหารครั้งล่าสุด
+function toggleMeal(){
+  const fast = $('fFasting').value === 'fast8';
+  $('fMealWrap').style.display = fast ? 'none' : '';
+  if(fast) $('fMeal').value = '';
+}
+$('fFasting').addEventListener('change', toggleMeal);
+$('blDate').addEventListener('change', renderLogs);
+
 function clearFields(){
   document.querySelectorAll('#view-form input, #view-form textarea').forEach(el => {
-    if(el.id === 'fBmi') return;
-    el.value = '';
+    // ชื่อผู้คัดกรองคงไว้ เพื่อไม่ต้องกรอกใหม่ทุกครั้ง
+    if(el.id === 'fBmi' || el.id === 'fScreener') return;
+    if(el.type === 'checkbox') el.checked = false;
+    else el.value = '';
   });
+  toggleMeal();
   document.querySelectorAll('#view-form select').forEach(el => {
     if(['fDay','fMonth','fYear','fHour','fMinute'].includes(el.id)) return;
     el.selectedIndex = 0;
@@ -984,9 +1005,8 @@ function enterApp(user){
   $('appRoot').hidden = false;
   $('whoami').textContent = user.name;
   $('whoRole').textContent = user.pages.includes('admin') ? 'ผู้ดูแลระบบ' : 'ผู้ใช้งาน';
-  // ชื่อผู้คัดกรองคือผู้ที่เข้าระบบอยู่ตอนนั้น แก้ไม่ได้
+  // ชื่อผู้คัดกรองเริ่มต้นเป็นผู้ที่เข้าระบบ และแก้ไขได้
   $('fScreener').value = user.name;
-  $('fScreener').readOnly = true;
   $('btnLogout').hidden = false;
   applyRights();
 }

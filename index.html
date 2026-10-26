@@ -209,6 +209,11 @@
                 <option value="both">ทั้งความดันและเบาหวาน</option>
               </select>
             </div>
+            <div class="field">
+              <label>โรคประจำตัว</label>
+              <label class="check"><input type="checkbox" id="fDxHtn"> ความดันโลหิตสูง</label>
+              <label class="check"><input type="checkbox" id="fDxDm"> เบาหวาน</label>
+            </div>
           </div>
 <div class="grid2">
             <div class="field">
@@ -315,7 +320,7 @@
             </select>
             <small>โดยทั่วไปดื่มน้ำเปล่าได้ แต่ไม่ควรดื่มเครื่องดื่มที่มีพลังงาน</small>
           </div>
-          <div class="field" style="margin-bottom:14px">
+          <div class="field" id="fMealWrap" style="margin-bottom:14px">
             <label for="fMeal">เวลาที่รับประทานอาหารหรือเครื่องดื่มที่มีพลังงานครั้งล่าสุด</label>
             <select id="fMeal">
                 <option value="">-- เลือก --</option>
@@ -508,22 +513,21 @@
         </div>
         <div class="card card-gap">
           <h3>บันทึกความดันรายครั้ง</h3>
+          <p class="note">หมายเหตุ: วัดด้วยเครื่องเดิม คนเดิม และเวลาเดิมทุกครั้ง (วันละไม่เกิน 4 ครั้ง)</p>
           <div class="grid2">
             <div class="field"><label for="blDate">วันที่วัด</label><input id="blDate" type="date"></div>
-            <div class="field">
-              <label for="blSession">ช่วงเวลา</label>
-              <select id="blSession"><option value="เช้า">🌅 เช้า</option><option value="เย็น">🌙 เย็น</option></select>
-            </div>
+            <div class="field"><label for="blTime">เวลาที่วัด</label><input id="blTime" type="time"></div>
             <div class="field"><label for="blSys">ความดันตัวบน</label><input id="blSys" type="number" inputmode="numeric"></div>
             <div class="field"><label for="blDia">ความดันตัวล่าง</label><input id="blDia" type="number" inputmode="numeric"></div>
           </div>
+          <p class="note" id="blCount" style="margin-top:10px"></p>
           <div class="grid2" style="margin-top:16px">
             <button class="btn btn-primary" id="blSave">บันทึกความดัน</button>
             <span></span>
           </div>
           <div class="table-wrap" style="margin-top:12px">
             <table>
-              <thead><tr><th>วันที่</th><th>ช่วง</th><th>ความดัน (mmHg)</th></tr></thead>
+              <thead><tr><th>วันที่</th><th>เวลา</th><th>ความดัน (mmHg)</th></tr></thead>
               <tbody id="blRows"></tbody>
             </table>
           </div>
@@ -736,19 +740,23 @@
           <p class="note">เมื่อผลเป็นสีส้มหรือสีแดง ระบบจะส่งเมลไปยังอีเมลที่ตั้งไว้ด้านล่าง</p>
           <div class="grid2">
             <div class="field">
-              <label for="alertEmail">อีเมลที่รับแจ้งเตือน</label>
-              <input id="alertEmail" type="email" placeholder="name@example.com">
+              <label for="alertEmail1">อีเมลที่รับแจ้งเตือน (คนที่ 1)</label>
+              <input id="alertEmail1" type="email" placeholder="name@example.com">
             </div>
             <div class="field">
-              <label for="alertSubject">หัวข้อเมล</label>
-              <input id="alertSubject" type="text">
+              <label for="alertEmail2">อีเมลที่รับแจ้งเตือน (คนที่ 2, ไม่บังคับ)</label>
+              <input id="alertEmail2" type="email" placeholder="name@example.com">
             </div>
+          </div>
+          <div class="field" style="margin-top:14px">
+            <label for="alertSubject">หัวข้อเมล</label>
+            <input id="alertSubject" type="text">
           </div>
           <div class="grid2" style="margin-top:16px">
             <button class="btn btn-primary" id="btnSaveAlert">บันทึกการตั้งค่า</button>
             <button class="btn btn-light" id="btnTestAlert">ส่งเมลทดสอบ</button>
           </div>
-          <p class="note">การตั้งค่านี้เก็บในเบราว์เซอร์เครื่องนี้ และเนื้อเมลไม่มีค่าความดันหรือน้ำตาล</p>
+          <p class="note">การตั้งค่านี้เก็บในฐานข้อมูล ใช้ร่วมกันทุกเครื่อง และเนื้อเมลไม่มีค่าความดันหรือน้ำตาล</p>
         </div>
       </section>
 
