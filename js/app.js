@@ -686,12 +686,12 @@ function renderDashboard(){
   updateNotifyBadge();
 
   const pctOf = n => total ? Math.round(n / total * 100) : 0;
-  $('sumNormal').textContent = `${counts.normal} ราย (${pctOf(counts.normal)}%)`;
-  $('sumRecheck').textContent = `${counts.recheck} ราย (${pctOf(counts.recheck)}%)`;
-  $('sumRefer').textContent = `${counts.refer} ราย (${pctOf(counts.refer)}%)`;
-  $('sumNormalBar').style.width = pctOf(counts.normal) + '%';
-  $('sumRecheckBar').style.width = pctOf(counts.recheck) + '%';
-  $('sumReferBar').style.width = pctOf(counts.refer) + '%';
+  // การ์ดสรุปใช้กลุ่มเดียวกับการ์ดสัดส่วนทางคลินิก
+  [['sumNormal', grp.normal], ['sumHtnSuspect', grp.htnSuspect], ['sumDmSuspect', grp.dmSuspect], ['sumBothSuspect', grp.bothSuspect], ['sumOldHtn', grp.oldHtn], ['sumOldDm', grp.oldDm]]
+    .forEach(([id, n]) => {
+      $(id).textContent = `${n} ราย (${pctOf(n)}%)`;
+      $(id + 'Bar').style.width = pctOf(n) + '%';
+    });
   $('sumTotal').textContent = total + ' รายการ';
 
   // การงดน้ำ อาหาร: งดครบ / ไม่ได้งด / ไม่แน่ใจหรือยังไม่ระบุ

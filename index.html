@@ -135,12 +135,24 @@
               <div class="ratio-track"><div class="ratio-fill f-ok" id="sumNormalBar"></div></div>
             </div>
             <div class="ratio-row">
-              <div class="ratio-head"><span><span class="badge b-warn">กลุ่มสงสัยป่วย</span> ต้องประเมินเพิ่มเติม</span><b class="c-orange" id="sumRecheck"></b></div>
-              <div class="ratio-track"><div class="ratio-fill f-warn" id="sumRecheckBar"></div></div>
+              <div class="ratio-head"><span><span class="badge" style="background:#ffedd5;color:#9a3412">สงสัยป่วยความดันโลหิตสูง</span></span><b id="sumHtnSuspect" style="color:#9a3412"></b></div>
+              <div class="ratio-track"><div class="ratio-fill" id="sumHtnSuspectBar" style="background:#fb923c"></div></div>
             </div>
             <div class="ratio-row">
-              <div class="ratio-head"><span><span class="badge b-bad">ระดับอันตราย</span> ควรพบแพทย์</span><b class="c-red" id="sumRefer"></b></div>
-              <div class="ratio-track"><div class="ratio-fill f-bad" id="sumReferBar"></div></div>
+              <div class="ratio-head"><span><span class="badge" style="background:#fef9c3;color:#854d0e">สงสัยป่วยเบาหวาน</span></span><b id="sumDmSuspect" style="color:#854d0e"></b></div>
+              <div class="ratio-track"><div class="ratio-fill" id="sumDmSuspectBar" style="background:#facc15"></div></div>
+            </div>
+            <div class="ratio-row">
+              <div class="ratio-head"><span><span class="badge" style="background:#dbeafe;color:#1e40af">สงสัยป่วยทั้งความดันและเบาหวาน</span></span><b id="sumBothSuspect" style="color:#1e40af"></b></div>
+              <div class="ratio-track"><div class="ratio-fill" id="sumBothSuspectBar" style="background:#60a5fa"></div></div>
+            </div>
+            <div class="ratio-row">
+              <div class="ratio-head"><span><span class="badge" style="background:#fee2e2;color:#991b1b">กลุ่มผู้ป่วยรายเก่าความดันสูง</span></span><b id="sumOldHtn" style="color:#991b1b"></b></div>
+              <div class="ratio-track"><div class="ratio-fill" id="sumOldHtnBar" style="background:#f87171"></div></div>
+            </div>
+            <div class="ratio-row">
+              <div class="ratio-head"><span><span class="badge" style="background:#f3e8ff;color:#6b21a8">กลุ่มผู้ป่วยรายเก่าเบาหวาน</span></span><b id="sumOldDm" style="color:#6b21a8"></b></div>
+              <div class="ratio-track"><div class="ratio-fill" id="sumOldDmBar" style="background:#c084fc"></div></div>
             </div>
             <div class="sum-row"><span>ทั้งหมด</span><b id="sumTotal">0 รายการ</b></div>
           </div>
