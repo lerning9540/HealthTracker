@@ -666,18 +666,19 @@ function renderDashboard(){
   const pct = n => total ? Math.round(n / total * 100) : 0;
   // สัดส่วนทางคลินิก: รายเก่า (มีโรคประจำตัว) ก่อน แล้วจึงแยกผู้สงสัยป่วยตามค่าที่ผิดปกติ
   // คนที่เป็นรายเก่าทั้งความดันและเบาหวาน นับในกลุ่มความดันโลหิตสูงกลุ่มเดียว
-  const grp = { normal:0, htnSuspect:0, dmSuspect:0, oldHtn:0, oldDm:0 };
+  const grp = { normal:0, htnSuspect:0, dmSuspect:0, bothSuspect:0, oldHtn:0, oldDm:0 };
   records.forEach(r => {
     const a = r.answers || {};
     const bpAbnormal = r.sbp >= 140 || r.dbp >= 90;
     const sugarAbnormal = sugarRisk(r) || needsRetest(r);
     if(a.fDxHtn) grp.oldHtn++;
     else if(a.fDxDm) grp.oldDm++;
+    else if(bpAbnormal && sugarAbnormal) grp.bothSuspect++;
     else if(bpAbnormal) grp.htnSuspect++;
     else if(sugarAbnormal) grp.dmSuspect++;
     else grp.normal++;
   });
-  [['thNormal', grp.normal], ['thHtnSuspect', grp.htnSuspect], ['thDmSuspect', grp.dmSuspect], ['thOldHtn', grp.oldHtn], ['thOldDm', grp.oldDm]]
+  [['thNormal', grp.normal], ['thHtnSuspect', grp.htnSuspect], ['thDmSuspect', grp.dmSuspect], ['thBothSuspect', grp.bothSuspect], ['thOldHtn', grp.oldHtn], ['thOldDm', grp.oldDm]]
     .forEach(([id, n]) => {
       $(id).textContent = `${n} ราย (${pct(n)}%)`;
       $(id + 'Bar').style.width = pct(n) + '%';
