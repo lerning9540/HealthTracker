@@ -11,20 +11,22 @@ const opt = (v,t) => `<option value="${v}">${t}</option>`;
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtDate = iso => { const [y,m,d] = iso.split('-').map(Number); return `${d} ${TH_MONTHS[m-1]} ${y+543}`; };
 
-// เร่งด่วน: ความดัน ≥180/≥110 ต้องส่งพบแพทย์ทันที
+// เร่งด่วน: SBP ≥180 และ DBP ≥110 ต้องส่งพบแพทย์
 // สงสัยป่วย: ความดัน 140–179 หรือ 90–109, น้ำตาลงดอาหาร 8 ชม. ≥126 เข้าติดตาม (BP Home 7 วัน)
 // น้ำตาลไม่ได้งดอาหาร ≥110 ให้เจาะซ้ำพรุ่งนี้โดยงดอาหาร 8 ชม.
-function sugarRisk(r){ return r.fbs>=126 && (r.answers || {}).fFasting === 'fast8'; }
-function needsRetest(r){ return r.fbs>=110 && (r.answers || {}).fFasting !== 'fast8'; }
+// ผู้ที่เป็นโรคประจำตัวแล้ว (ติ๊กในหน้าคัดกรอง) ไม่ต้องคัดกรองโรคนั้นซ้ำ จึงไม่นับค่าของโรคนั้น
+function sugarRisk(r){ return !(r.answers || {}).fDxDm && r.fbs>=126 && (r.answers || {}).fFasting === 'fast8'; }
+function needsRetest(r){ return !(r.answers || {}).fDxDm && r.fbs>=110 && (r.answers || {}).fFasting !== 'fast8'; }
 // ความดันตามเกณฑ์โครงการ (ไฟล์เกณฑ์): ต้องเข้าเกณฑ์ SBP และ DBP พร้อมกัน
 // เร่งด่วน = SBP ≥180 และ DBP ≥110 | สงสัยป่วย = SBP 140–170 และ DBP 90–109 | นอกนั้นยังไม่เข้าเกณฑ์
+// ผู้ที่เป็นความดันโลหิตสูงอยู่แล้วไม่นับ "สงสัยป่วย" แต่ยังแจ้งเร่งด่วนหากค่าสูงมาก
 function bpLevel(r){
   if(r.sbp>=180 && r.dbp>=110) return 'refer';
-  if(r.sbp>=140 && r.dbp>=90) return 'recheck';
+  if(!(r.answers || {}).fDxHtn && r.sbp>=140 && r.dbp>=90) return 'recheck';
   return 'normal';
 }
 // สถานะกลาง ใช้ร่วมกันทั้งระบบ (การ์ด ตัวกรอง กระดิ่ง อีเมล กล่องผลลัพธ์ รายงาน)
-// เร่งด่วน = ความดัน ≥180/≥110 | ต้องติดตาม = ค่าผิดปกติข้อใดข้อหนึ่ง (ความดัน ≥140/≥90, น้ำตาลงดอาหาร ≥126, น้ำตาลไม่งดอาหาร ≥110)
+// เร่งด่วน = SBP ≥180 และ DBP ≥110 | ต้องติดตาม = ความดันสงสัยป่วยตามข้อ bpLevel หรือน้ำตาลเข้าเกณฑ์ (งดอาหาร ≥126, ไม่งดอาหาร ≥110)
 function statusOf(r){
   const bp = bpLevel(r);
   if(bp === 'refer') return 'refer';
@@ -34,17 +36,20 @@ function statusOf(r){
 // กลุ่มทางคลินิก: รายเก่า (มีโรคประจำตัว) ก่อน แล้วจึงแยกผู้สงสัยป่วยตามค่าที่ผิดปกติ
 // ใช้ร่วมกันทั้งการ์ดสัดส่วน การ์ดสรุป หน้าหลัก ทะเบียน และไฟล์ Excel
 const CLINICAL_LABEL = { normal:'ปกติ', htnSuspect:'สงสัยป่วยความดันโลหิตสูง', dmSuspect:'สงสัยป่วยเบาหวาน', bothSuspect:'สงสัยป่วยทั้งสองโรค', oldHtn:'รายเก่าความดันโลหิตสูง', oldDm:'รายเก่าเบาหวาน' };
+// คนหนึ่งคนอาจนับได้มากกว่า 1 กลุ่ม เช่น เป็นเบาหวานอยู่แล้ว (รายเก่าเบาหวาน) และความดันเข้าเกณฑ์ (สงสัยป่วยความดัน)
+// ผู้ที่เป็นความดันทั้งสองโรคนับในกลุ่มความดันโลหิตสูงกลุ่มเดียว
 function clinicalOf(r){
   const a = r.answers || {};
-  const bpAbnormal = bpLevel(r) !== 'normal';
+  const bpAbnormal = !a.fDxHtn && bpLevel(r) !== 'normal';
   const sugarAbnormal = sugarRisk(r) || needsRetest(r);
-  let key = 'normal';
-  if(a.fDxHtn) key = 'oldHtn';
-  else if(a.fDxDm) key = 'oldDm';
-  else if(bpAbnormal && sugarAbnormal) key = 'bothSuspect';
-  else if(bpAbnormal) key = 'htnSuspect';
-  else if(sugarAbnormal) key = 'dmSuspect';
-  return { key, label: CLINICAL_LABEL[key] };
+  const keys = [];
+  if(bpAbnormal && sugarAbnormal) keys.push('bothSuspect');
+  else if(bpAbnormal) keys.push('htnSuspect');
+  else if(sugarAbnormal) keys.push('dmSuspect');
+  if(a.fDxHtn) keys.push('oldHtn');
+  else if(a.fDxDm) keys.push('oldDm');
+  if(!keys.length) keys.push('normal');
+  return { keys, label: keys.map(k => CLINICAL_LABEL[k]).join(' + ') };
 }
 function typeOf(r){
   const bp = bpLevel(r) !== 'normal';
@@ -224,7 +229,7 @@ function renderBp(){
     return `<tr><td>วันที่ ${day}</td><td>${last ? fmtDate(last.measured_at) : '-'}</td><td>${last ? `${last.systolic}/${last.diastolic}` : '-'}</td></tr>`;
   }).join('');
   $('bpSummary').innerHTML = avg
-    ? `ค่าเฉลี่ย <b>${avg.sys}/${avg.dia}</b> mmHg จาก ${avg.days} วัน · <span class="badge ${avg.elevated ? 'b-bad' : 'b-ok'}">${avg.elevated ? 'เกินเกณฑ์ (≥135/85) ควรพบแพทย์' : 'อยู่ในเกณฑ์ปกติ (<135/85)'}</span>`
+    ? `ค่าเฉลี่ย <b>${avg.sys}/${avg.dia}</b> mmHg จาก ${avg.days} วัน · <span class="badge ${avg.elevated ? 'b-bad' : 'b-ok'}">${avg.elevated ? 'เกินเกณฑ์ (≥135/85) ควรติดตามประเมินผล' : 'อยู่ในเกณฑ์ปกติ (<135/85)'}</span>`
     : 'ยังไม่มีข้อมูลการวัดที่บ้าน';
 }
 async function saveBp(){
@@ -706,7 +711,7 @@ function renderDashboard(){
   const pct = n => total ? Math.round(n / total * 100) : 0;
   // สัดส่วนทางคลินิก (คนที่เป็นรายเก่าทั้งความดันและเบาหวาน นับในกลุ่มความดันโลหิตสูงกลุ่มเดียว)
   const grp = { normal:0, htnSuspect:0, dmSuspect:0, bothSuspect:0, oldHtn:0, oldDm:0 };
-  records.forEach(r => grp[clinicalOf(r).key]++);
+  records.forEach(r => clinicalOf(r).keys.forEach(k => grp[k]++));
   [['thNormal', grp.normal], ['thHtnSuspect', grp.htnSuspect], ['thDmSuspect', grp.dmSuspect], ['thBothSuspect', grp.bothSuspect], ['thOldHtn', grp.oldHtn], ['thOldDm', grp.oldDm]]
     .forEach(([id, n]) => {
       $(id).textContent = `${n} ราย (${pct(n)}%)`;
@@ -800,15 +805,16 @@ function readForm(){
 }
 
 function showResult(f, st){
-  const bpHigh = bpLevel(f) !== 'normal';
-  const fast = f.fasting === 'fast8';
-  const sgHigh = f.fbs>=126 && fast;
-  const bpMsg = bpHigh
-    ? 'พบค่าความดันถึงเกณฑ์เฝ้าระวัง ให้นั่งพักอย่างน้อย 15 นาที แล้ววัดความดันโลหิตซ้ำด้วยวิธีที่ถูกต้อง หากยังพบค่าผิดปกติให้ประสานบุคลากรทางการแพทย์เพื่อประเมินต่อ'
-    : 'ค่าความดันโลหิตอยู่ในเกณฑ์ที่ยังไม่ต้องติดตามเพิ่มเติม';
+  // f ต้องมี answers ด้วย เพื่อให้ข้อความตรงกับกฎของโรคประจำตัว
+  const bp = bpLevel(f);
+  const bpMsg = bp === 'refer'
+    ? 'ความดันถึงเกณฑ์เร่งด่วน ให้นั่งพักอย่างน้อย 15 นาที แล้ววัดซ้ำ หากยังสูงอยู่ให้ส่งต่อพบแพทย์ทันที (ถ้า DBP ≥120 ให้ส่งพบแพทย์ทันที)'
+    : bp === 'recheck'
+      ? 'ความดันเข้าเกณฑ์สงสัยป่วยโรคความดันโลหิตสูง ให้ติดตามประเมินผล'
+      : 'ค่าความดันโลหิตอยู่ในเกณฑ์ที่ยังไม่ต้องติดตามเพิ่มเติม';
   let sgMsg = 'ค่าน้ำตาลอยู่ในเกณฑ์ที่ยังไม่ต้องติดตามเพิ่มเติม';
-  if(sgHigh) sgMsg = 'ค่าน้ำตาลถึงเกณฑ์ติดตาม ควรปรึกษาบุคลากรทางการแพทย์เพื่อพิจารณาตรวจซ้ำ';
-  else if(f.fbs>=110 && !fast) sgMsg = 'ไม่ได้งดอาหาร 8 ชั่วโมง ให้เจาะน้ำตาลซ้ำพรุ่งนี้โดยงดอาหาร 8 ชั่วโมง';
+  if(sugarRisk(f)) sgMsg = 'ค่าน้ำตาลงดอาหาร 8 ชั่วโมงเข้าเกณฑ์สงสัยป่วยโรคเบาหวาน ให้ติดตามประเมินผล';
+  else if(needsRetest(f)) sgMsg = 'ไม่ได้งดอาหาร 8 ชั่วโมง ให้เจาะน้ำตาลซ้ำพรุ่งนี้โดยงดอาหาร 8 ชั่วโมง หากได้ ≥126 mg/dL ให้มาที่ รพสต. ในวันรุ่งขึ้น';
 
   const titles = {
     normal: 'ผลคัดกรองเบื้องต้น: ปกติตามเกณฑ์',
@@ -859,7 +865,7 @@ async function evaluate(){
 
   evalBusy = true;
   setEvalEnabled(false);
-  const st = statusOf(f);
+  const st = statusOf({ ...f, answers });
   const { data, error } = await sb.from('screening_records').insert({
     code: 'REC-' + pad(records.length + 1),
     name: f.name,
@@ -879,7 +885,7 @@ async function evaluate(){
   records.push(rec);
   lastSavedKey = key;
   renderDashboard();
-  showResult(f, st);
+  showResult({ ...f, answers }, st);
   $('resultSaved').textContent = 'บันทึกสำเร็จแล้ว (รหัส ' + rec.code + ')';
   clearFields();
   $('btnClear').style.display = 'none';
