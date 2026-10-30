@@ -32,7 +32,7 @@
       <div class="brand-logo">♥</div>
       <div>
         <h2>ระบบคัดกรองสุขภาพชุมชน</h2>
-        <p>หมู่ 9 ตำบลบ้านป่า</p>
+        <p>ตำบลบ้านป่า</p>
       </div>
     </div>
     <nav class="nav">
@@ -43,7 +43,7 @@
       <button data-view="report"><span class="ico">▤</span>รายงานและส่งออก Excel</button>
       <button data-view="admin"><span class="ico">⚙</span>ผู้ดูแลระบบ</button>
     </nav>
-    <div class="side-quote">"สุขภาพดี เริ่มได้ที่ชุมชน<br>ร่วมดูแลกัน... หมู่ 9"</div>
+    <div class="side-quote">"สุขภาพดี เริ่มได้ที่ชุมชน<br>ร่วมดูแลกัน... ตำบลบ้านป่า"</div>
   </aside>
   <div class="scrim" id="scrim"></div>
 
@@ -53,7 +53,7 @@
         <button class="menu-btn" id="menuBtn" aria-label="เปิดเมนู">☰</button>
         <div>
           <h1>ระบบคัดกรองสุขภาพชุมชน</h1>
-          <p>หมู่ 9 ตำบลบ้านป่า อำเภอเมืองพิษณุโลก จังหวัดพิษณุโลก</p>
+          <p>ตำบลบ้านป่า อำเภอเมืองพิษณุโลก จังหวัดพิษณุโลก</p>
         </div>
       </div>
       <div class="topbar-right">
@@ -74,7 +74,7 @@
         </div>
 
         <div class="welcome">
-          <h3>ยินดีต้อนรับสู่ระบบคัดกรองสุขภาพชุมชน หมู่ 9</h3>
+          <h3>ยินดีต้อนรับสู่ระบบคัดกรองสุขภาพชุมชน ตำบลบ้านป่า</h3>
           <p>ตำบลบ้านป่า อำเภอเมืองพิษณุโลก จังหวัดพิษณุโลก</p>
           <p>ภาพรวมการคัดกรองโรคความดันโลหิตสูงและเบาหวาน พร้อมติดตามผลโดยทีมสุขภาพ</p>
         </div>
@@ -84,7 +84,7 @@
           <div class="kpi"><div class="label">⚠ ต้องติดตาม</div><div class="value c-orange" id="kpiSuspect">0</div><div class="sub">ราย</div></div>
           <div class="kpi"><div class="label">◷ กำลังติดตาม</div><div class="value c-blue" id="kpiTracking">0</div><div class="sub">ราย · รอการติดตาม</div></div>
           <div class="kpi"><div class="label">✓ ติดตามครบ 7 วัน</div><div class="value c-teal" id="kpiSeven">0</div><div class="sub">ราย</div></div>
-          <div class="kpi"><div class="label">‼ เร่งด่วน / เกินกำหนดติดตาม</div><div class="value c-red" id="kpiUrgent">0</div><div class="sub">ราย</div></div>
+          <div class="kpi"><div class="label">‼ กึ่งวิกฤต/ฉุกเฉิน / เกินกำหนดติดตาม</div><div class="value c-red" id="kpiUrgent">0</div><div class="sub">ราย</div></div>
         </div>
 
         <div class="card card-gap">
@@ -201,8 +201,18 @@
         <div class="form-card">
           <h3>1. ข้อมูลประชาชน</h3>
           <div class="field" style="margin-bottom:14px">
-            <label for="pName">ชื่อ - นามสกุล</label>
-            <input id="pName" type="text" placeholder="พิมพ์ชื่อ-นามสกุล">
+            <label for="pName">คำนำหน้า และ ชื่อ - นามสกุล</label>
+            <div style="display:flex;gap:8px">
+              <select id="pPrefix" style="max-width:130px" aria-label="คำนำหน้าชื่อ">
+                <option value="">-- เลือก --</option>
+                <option>นาย</option>
+                <option>นาง</option>
+                <option>นางสาว</option>
+                <option>เด็กชาย</option>
+                <option>เด็กหญิง</option>
+              </select>
+              <input id="pName" type="text" placeholder="พิมพ์ชื่อ-นามสกุล" style="flex:1">
+            </div>
           </div>
           <div class="grid2" style="margin-bottom:14px">
             <div class="field">
@@ -418,7 +428,7 @@
             <button class="btn btn-light btn-primary" data-filter="all" id="regFilterAll">ทั้งหมด (<span id="cntAll">0</span>)</button>
             <button class="btn btn-light" data-filter="normal" id="regFilterNormal">ปกติ (<span id="cntNormal">0</span>)</button>
             <button class="btn btn-light" data-filter="recheck" id="regFilterRecheck">ต้องติดตาม (<span id="cntRecheck">0</span>)</button>
-            <button class="btn btn-light" data-filter="refer" id="regFilterRefer">เร่งด่วน (<span id="cntRefer">0</span>)</button>
+            <button class="btn btn-light" data-filter="refer" id="regFilterRefer">กึ่งวิกฤต/ฉุกเฉิน (<span id="cntRefer">0</span>)</button>
           </div>
           <div class="table-wrap">
             <table>
@@ -579,6 +589,28 @@
           <p class="note">เส้นประสีแดงคือเกณฑ์ความดันตัวบน 140 mmHg</p>
         </div>
         <div class="card card-gap">
+          <h3>ติดตามเบาหวานรายครั้ง</h3>
+          <p class="note">สำหรับผู้ที่สงสัยป่วยเบาหวาน บันทึกค่าน้ำตาลปลายนิ้วทุกครั้งที่วัด</p>
+          <div class="grid2" style="margin-bottom:10px">
+            <div class="field"><label for="sgDate">วันที่</label><input id="sgDate" type="date"></div>
+            <div class="field"><label for="sgTime">เวลา</label><input id="sgTime" type="time"></div>
+          </div>
+          <div class="grid2" style="margin-bottom:10px">
+            <div class="field"><label for="sgFasting">งด/ไม่งดอาหาร</label>
+              <select id="sgFasting">
+                <option value="fast8">งดครบ 8 ชั่วโมง</option>
+                <option value="notfast">ไม่ได้งดครบ 8 ชั่วโมง</option>
+                <option value="unsure">ไม่แน่ใจ</option>
+              </select></div>
+            <div class="field"><label for="sgValue">ค่าน้ำตาลปลายนิ้ว (mg/dL)</label><input id="sgValue" type="number" inputmode="numeric"></div>
+          </div>
+          <button class="btn btn-primary" id="sgSave">บันทึกค่าน้ำตาล</button>
+          <div class="table-wrap" style="margin-top:12px"><table>
+            <thead><tr><th>วันที่</th><th>เวลา</th><th>งด/ไม่งด</th><th>น้ำตาล</th><th>ผล</th></tr></thead>
+            <tbody id="sgRows"></tbody>
+          </table></div>
+        </div>
+        <div class="card card-gap">
           <h3>ประวัติการติดตาม</h3>
           <div class="table-wrap">
             <table>
@@ -633,7 +665,7 @@
               <option value="all">ทั้งหมด</option>
               <option value="normal">ปกติ</option>
               <option value="recheck">ต้องติดตาม</option>
-              <option value="refer">เร่งด่วน</option>
+              <option value="refer">กึ่งวิกฤต/ฉุกเฉิน</option>
             </select>
           </div>
         </div>
