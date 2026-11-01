@@ -96,11 +96,18 @@ function isValidEmail(s){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s); }
 
 // สีส้ม = รอติดตามซ้ำ (recheck) สีแดง = รอพบแพทย์ (refer)
 // ผู้ที่ต้องส่งเมล: สถานะไม่ปกติ หรือค่าเฉลี่ย BP Home 7 วันเข้าเกณฑ์ (ตัวบน ≥140 และตัวล่าง ≥90 หรือเร่งด่วน)
-function bpHomeQualifies(r){
+// ครบกำหนดติดตามแล้ว: ความดัน (ถ้าต้องติดตาม) ครบ 7 วัน และน้ำตาล (ถ้าต้องติดตาม) บันทึกครบ 2 ครั้ง
+function followUpComplete(r){
   const avg = bpHomeAverage(bpHomeFor(r.id), r.answers);
-  // รอบ 2 ส่งเมลเมื่อครบ 7 วันเท่านั้น (ค่าเฉลี่ยหาร 28 จึงต้องมีครบทุกวันก่อน)
-  // รอบ 2 = ครบ 7 วันแล้ว และสถานะยังไม่ปกติอยู่ (ใช้ค่าปัจจุบัน)
-  return !!avg && avg.days >= 7 && statusOf(r) !== 'normal';
+  const bpApplies = !(r.answers || {}).fDxHtn && bpLevel(r) !== 'normal';
+  const sgApplies = needsSugar(r);
+  const bpDone = !bpApplies || (!!avg && avg.days >= 7);
+  const sgDone = !sgApplies || sugarLogsFor(r.id).length >= 2;
+  return bpDone && sgDone;
+}
+// รอบ 2 = ครบกำหนดติดตามทุกส่วนที่ต้องทำ และสถานะยังไม่ปกติอยู่ (ใช้ค่าปัจจุบัน)
+function bpHomeQualifies(r){
+  return followUpComplete(r) && statusOf(r) !== 'normal';
 }
 function needsAlert(r){ return statusOf(r) !== 'normal' || bpHomeQualifies(r); }
 
@@ -742,7 +749,8 @@ function addDays(iso, n){
   const t = new Date(y, m-1, d+n);
   return `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`;
 }
-function isRisk(r){ return statusOf(r) !== 'normal'; }
+// อยู่ในรายการติดตาม: สถานะปัจจุบันไม่ปกติ หรือผลคัดกรองไม่ปกติและยังติดตามไม่ครบ (แม้ค่าปัจจุบันจะปกติแล้ว)
+function isRisk(r){ return statusOf(r) !== 'normal' || (statusOf(r, true) !== 'normal' && !followUpComplete(r)); }
 // ส่งต่อพบแพทย์แล้ว (การติดตามครั้งล่าสุด) ไม่นับในกลุ่มเร่งด่วนอีก
 function isReferred(r){
   const last = latestFollowUp(r.id);
