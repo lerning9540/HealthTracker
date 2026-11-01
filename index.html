@@ -483,6 +483,7 @@
             </table>
           </div>
           <p id="bpSummary" style="margin:12px 0"></p>
+          <p class="note">หมายเหตุ: วัดด้วยเครื่องเดิม คนเดิม และเวลาเดิมทุกครั้ง (ช่วงเช้าไม่เกิน 2 ครั้ง และช่วงเย็นไม่เกิน 2 ครั้ง)</p>
           <div class="grid2">
             <div class="field">
               <label for="bpDay">วันที่ที่วัด</label>
@@ -494,6 +495,10 @@
             <div class="field">
               <label for="bpDate">วันที่วัด</label>
               <input id="bpDate" type="date">
+            </div>
+            <div class="field">
+              <label for="bpTime">เวลาที่วัด</label>
+              <input id="bpTime" type="time">
             </div>
             <div class="field">
               <label for="bpSys">ความดันตัวบน</label>
@@ -542,7 +547,7 @@
           </div>
           <div class="table-wrap" style="margin-top:12px">
             <table>
-              <thead><tr><th>วัน</th><th>อาการ</th><th>น้ำตาล</th></tr></thead>
+              <thead><tr><th>วัน</th><th>อาการ</th></tr></thead>
               <tbody id="dRows"></tbody>
             </table>
           </div>
@@ -572,6 +577,15 @@
             <input id="pdDate" type="date">
           </div>
           <button class="btn btn-primary" id="pdDateSave">บันทึกวันที่</button>
+        </div>
+        <div class="card card-gap" id="pdAnswers">
+          <h3>ข้อมูลที่กรอกตอนคัดกรองครั้งแรก</h3>
+          <p class="note">แสดงอย่างเดียว ไม่สามารถแก้ไขได้จากหน้านี้</p>
+          <div class="table-wrap" style="margin-top:10px">
+            <table>
+              <tbody id="pdAnswerRows"></tbody>
+            </table>
+          </div>
         </div>
         <div class="card card-gap" id="pdDeleteCard" hidden>
           <h3>ลบข้อมูลผู้รับการคัดกรองนี้ (เฉพาะผู้ดูแลระบบ)</h3>
@@ -638,6 +652,16 @@
           <div class="report-actions">
             <button class="btn btn-light" id="btnPrint">🖨 พิมพ์ / PDF</button>
             <button class="btn btn-primary" id="btnExport">⬇ ส่งออก Excel</button>
+          </div>
+        </div>
+        <div class="card filters">
+          <div class="field">
+            <label for="rpCodeFrom">เลขทะเบียนตั้งแต่ (กรองตอนส่งออก Excel)</label>
+            <input id="rpCodeFrom" type="search" placeholder="เว้นว่าง = ตั้งแต่รายแรก">
+          </div>
+          <div class="field">
+            <label for="rpCodeTo">ถึงเลขทะเบียน</label>
+            <input id="rpCodeTo" type="search" placeholder="เว้นว่าง = ถึงรายสุดท้าย">
           </div>
         </div>
 

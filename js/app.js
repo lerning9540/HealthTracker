@@ -205,7 +205,7 @@ async function loadRecordsRemote(){
 // ---- BP Home 7 วัน ----
 let bpHome = [];
 async function loadBpHome(){
-  const { data, error } = await sb.from('bp_home_readings').select('record_id, day_number, measured_at, systolic, diastolic');
+  const { data, error } = await sb.from('bp_home_readings').select('record_id, day_number, measured_at, measured_time, systolic, diastolic');
   if(error){ toast('โหลดข้อมูล BP Home ไม่สำเร็จ: ' + error.message); return; }
   bpHome = data;
 }
@@ -226,6 +226,7 @@ function openBp(recordId){
   $('bpCard').dataset.record = recordId;
   $('bpName').textContent = displayName(r) || r.code;
   $('bpDate').value = todayIso();
+  $('bpTime').value = new Date().toTimeString().slice(0, 5);
   $('sgDate').value = todayIso();
   $('sgTime').value = new Date().toTimeString().slice(0, 5);
   $('bpSys').value = '';
@@ -245,6 +246,9 @@ function dayStripHtml(list){
   const chips = [1,2,3,4,5,6,7].map(d => `<span class="day-chip${done.has(d) ? ' done' : ''}">${d}</span>`).join('');
   return `${chips}<span class="day-count">${done.size} / 7 วัน</span>`;
 }
+const BP_HOME_MAX_PER_SESSION = 2;
+// เช้า = วัดก่อน 12:00 น. เย็น = ตั้งแต่ 12:00 น.
+function sessionOf(time){ return time.slice(0, 5) < '12:00' ? 'เช้า' : 'เย็น'; }
 function renderBp(){
   const id = $('bpCard').dataset.record;
   if(!id) return;
@@ -252,33 +256,49 @@ function renderBp(){
   const avg = bpHomeAverage(list, (records.find(x => x.id === id) || {}).answers);
   $('bpStrip').innerHTML = dayStripHtml(list);
 
-  // ให้บันทึกได้เฉพาะวันถัดไปที่ยังไม่ได้วัด โดยวันที่ล็อกเป็นวันต่อวันหลังวันคัดกรอง
+  // วันละไม่เกิน 2 ครั้งช่วงเช้า และ 2 ครั้งช่วงเย็น: เลือกได้เฉพาะวันที่ยังมีช่องว่าง
   const rec = records.find(x => x.id === id);
-  const next = [1,2,3,4,5,6,7].find(d => !list.some(x => x.day_number === d));
-  $('bpDay').innerHTML = next ? `<option value="${next}">วันที่ ${next}</option>` : '<option value="">ครบ 7 วันแล้ว</option>';
-  $('bpDate').value = next && rec ? addDays(rec.date, next) : '';
+  const counts = d => {
+    const hits = list.filter(x => x.day_number === d && x.measured_time);
+    const morning = hits.filter(x => sessionOf(x.measured_time) === 'เช้า').length;
+    return { morning, evening: hits.length - morning };
+  };
+  const open = [1,2,3,4,5,6,7].filter(d => { const c = counts(d); return c.morning < BP_HOME_MAX_PER_SESSION || c.evening < BP_HOME_MAX_PER_SESSION; });
+  const prev = Number($('bpDay').value);
+  const day = open.includes(prev) ? prev : open[0];
+  $('bpDay').innerHTML = open.length ? open.map(d => `<option value="${d}">วันที่ ${d}</option>`).join('') : '<option value="">ครบทุกวันแล้ว</option>';
+  $('bpDay').value = day || '';
+  $('bpDate').value = day && rec ? addDays(rec.date, day) : '';
   $('bpDate').disabled = true;
-  $('bpSave').disabled = !next;
-  $('bpRows').innerHTML = [1,2,3,4,5,6,7].map(day => {
-    const hits = list.filter(x => x.day_number === day);
-    const last = hits[hits.length - 1];
-    return `<tr><td>วันที่ ${day}</td><td>${last ? fmtDate(last.measured_at) : '-'}</td><td>${last ? `${last.systolic}/${last.diastolic}` : '-'}</td></tr>`;
+  $('bpSave').disabled = !day;
+  $('bpRows').innerHTML = [1,2,3,4,5,6,7].map(d => {
+    const hits = list.filter(x => x.day_number === d);
+    const text = hits.map(x => `${x.measured_time ? x.measured_time.slice(0, 5) : '-'} ${x.systolic}/${x.diastolic}`).join('<br>');
+    return `<tr><td>วันที่ ${d}</td><td>${hits.length ? fmtDate(hits[0].measured_at) : '-'}</td><td>${text || '-'}</td></tr>`;
   }).join('');
-  $('bpSummary').innerHTML = avg
+  const sel = day ? counts(day) : null;
+  const selText = sel ? ` · วันที่เลือก: เช้า ${sel.morning} / ${BP_HOME_MAX_PER_SESSION} ครั้ง · เย็น ${sel.evening} / ${BP_HOME_MAX_PER_SESSION} ครั้ง` : '';
+  $('bpSummary').innerHTML = (avg
     ? `ค่าเฉลี่ย <b>${avg.sys}/${avg.dia}</b> mmHg จาก ${avg.days} วัน · <span class="badge ${avg.elevated ? 'b-bad' : 'b-ok'}">${avg.elevated ? 'เข้าเกณฑ์ ควรติดตามประเมินผล' : 'ยังไม่เข้าเกณฑ์ (ปกติ)'}</span>`
-    : 'ยังไม่มีข้อมูลการวัดที่บ้าน';
+    : 'ยังไม่มีข้อมูลการวัดที่บ้าน') + selText;
   if(rec) renderDaily(id, rec);
 }
 async function saveBp(){
   if(!canView('fu_record')){ toast('บันทึกได้เฉพาะ อสม.'); return; }
   const id = $('bpCard').dataset.record;
+  const rec = records.find(x => x.id === id);
   const day = Number($('bpDay').value);
   const sys = parseInt($('bpSys').value, 10);
   const dia = parseInt($('bpDia').value, 10);
-  const measured_at = $('bpDate').value;
+  const measured_time = $('bpTime').value;
   if(!sys || !dia){ toast('กรุณากรอกค่าความดันให้ครบ'); return; }
-  if(!measured_at){ toast('กรุณาเลือกวันที่วัด'); return; }
-  const row = { record_id: id, day_number: day, measured_at, systolic: sys, diastolic: dia };
+  if(!day || !rec){ toast('ไม่มีวันที่ให้บันทึกแล้ว'); return; }
+  if(!measured_time){ toast('กรุณาเลือกเวลาที่วัด'); return; }
+  const session = sessionOf(measured_time);
+  const sameSession = bpHomeFor(id).filter(x => x.day_number === day && x.measured_time && sessionOf(x.measured_time) === session).length;
+  if(sameSession >= BP_HOME_MAX_PER_SESSION){ toast(`วันที่ ${day} บันทึกช่วง${session}ครบ ${BP_HOME_MAX_PER_SESSION} ครั้งแล้ว`); return; }
+  const measured_at = addDays(rec.date, day);
+  const row = { record_id: id, day_number: day, measured_at, measured_time, systolic: sys, diastolic: dia };
   const { error } = await sb.from('bp_home_readings').insert(row);
   if(error){ toast('บันทึกไม่สำเร็จ: ' + error.message); return; }
   bpHome.push(row);
@@ -538,6 +558,25 @@ function trendSvg(r, list){
 
 const FAST_LABEL = { fast8: 'งดครบ 8 ชม.', notfast: 'ไม่ได้งดครบ 8 ชม.', unsure: 'ไม่แน่ใจ' };
 const MEAL_LABEL = { unknown: 'จำไม่ได้', within2: 'ภายใน 2 ชม.', over2: 'มากกว่า 2 ชม.' };
+// แสดงคำตอบทั้งหมดจากการคัดกรองครั้งแรก เป็นอ่านอย่างเดียว ใช้ข้อความหัวข้อจากฟอร์มคัดกรอง
+function renderAnswers(r){
+  const a = r.answers || {};
+  const rows = Object.keys(a).map(k => {
+    const label = document.querySelector(`label[for="${k}"]`)?.textContent.trim() || k;
+    let v = a[k];
+    if(v === true) v = 'ใช่';
+    else if(v === false) v = 'ไม่ใช่';
+    else if(Array.isArray(v)) v = v.join(' / ');
+    else if(k === 'fFasting') v = FAST_LABEL[v] || v;
+    else if(k === 'fMeal') v = MEAL_LABEL[v] || v;
+    return `<tr><td>${esc(label)}</td><td>${esc(v === '' || v == null ? '-' : v)}</td></tr>`;
+  });
+  $('pdAnswerRows').innerHTML = rows.length ? rows.join('') : '<tr><td style="text-align:center;color:var(--muted)">ไม่มีข้อมูล</td></tr>';
+}
+function nextRecordCode(){
+  const nums = records.map(r => parseInt(String(r.code || '').replace(/\D/g, ''), 10) || 0);
+  return 'REC-' + pad(Math.max(0, ...nums) + 1);
+}
 function renderPatient(){
   const r = records.find(x => x.id === currentPatientId);
   if(!r){ setView('register'); return; }
@@ -561,6 +600,7 @@ function renderPatient(){
   $('nsSave').hidden = !canView('followup');
   $('pdDateCard').hidden = !canView('admin');
   $('pdDeleteCard').hidden = !canView('admin');
+  renderAnswers(r);
   $('pdDate').value = r.date;
   $('nsStatus').disabled = !canView('followup');
   $('nsNote').disabled = !canView('followup');
@@ -957,8 +997,9 @@ async function evaluate(){
   evalBusy = true;
   setEvalEnabled(false);
   const st = statusOf({ ...f, answers });
+  // เลขทะเบียนถัดไปจากเลขสูงสุดที่มีอยู่ (ไม่ใช้จำนวนรายการ เพราะซ้ำได้หลังลบรายการ)
   const { data, error } = await sb.from('screening_records').insert({
-    code: 'REC-' + pad(records.length + 1),
+    code: nextRecordCode(),
     name: f.name,
     age: parseInt(f.age, 10) || null,
     screen_date: f.date,
@@ -1110,7 +1151,11 @@ function csvCell(v){
 }
 
 function exportCsv(){
-  const list = filteredRecords();
+  // กรองช่วงเลขทะเบียน (ตั้งแต่ ถึง) เทียบแบบตัวเลขถ้าเป็นตัวเลข เช่น 9 มาก่อน 10
+  const from = $('rpCodeFrom').value.trim();
+  const to = $('rpCodeTo').value.trim();
+  const cmp = (a, b) => String(a || '').localeCompare(String(b || ''), 'th', { numeric: true });
+  const list = filteredRecords().filter(r => (!from || cmp(r.code, from) >= 0) && (!to || cmp(r.code, to) <= 0));
   if(!list.length){ toast('ไม่มีข้อมูลให้ส่งออก'); return; }
   const head = ['วันที่','รหัส','ชื่อ-สกุล','อายุ','ความดันตัวบน','ความดันตัวล่าง','น้ำตาลในเลือด','ผลคัดกรอง','ผลการประเมินทางคลินิก','การงดน้ำ อาหาร','เวลาทานอาหารล่าสุด'];
   const rows = list.map(r => {
@@ -1496,6 +1541,7 @@ $('fuRows').addEventListener('click', e => {
   if(bp) openBp(bp.dataset.bphome);
 });
 $('bpSave').addEventListener('click', saveBp);
+$('bpDay').addEventListener('change', renderBp);
 $('dSave').addEventListener('click', saveDaily);
 $('sgSave').addEventListener('click', saveSugar);
 $('bpClose').addEventListener('click', closeBp);
