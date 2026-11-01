@@ -387,10 +387,6 @@
 
         <div class="form-card">
           <h3>6. ข้อมูลเพิ่มเติม</h3>
-          <div class="field" style="margin-bottom:14px">
-            <label for="fNotes">อาการหรือข้อสังเกตเพิ่มเติม</label>
-            <textarea id="fNotes" placeholder="เช่น เวียนศีรษะ ปวดศีรษะ หรือไม่มีอาการ"></textarea>
-          </div>
           <div class="actions">
             <button class="btn btn-primary" id="btnEval">ประเมินผลคัดกรองเบื้องต้น</button>
             <button class="btn btn-light" id="btnClear">ล้างข้อมูล</button>
@@ -512,6 +508,44 @@
             <button class="btn btn-primary" id="bpSave">บันทึกการวัด</button>
             <button class="btn btn-light" id="bpClose">ปิด</button>
           </div>
+          <div id="sgBox" hidden style="margin-top:22px">
+            <h3>ติดตามเบาหวานรายครั้ง</h3>
+            <p class="note">สำหรับผู้ที่สงสัยป่วยเบาหวาน บันทึกค่าน้ำตาลปลายนิ้วทุกครั้งที่วัด</p>
+            <div class="grid2" style="margin-top:10px;margin-bottom:10px">
+              <div class="field"><label for="sgDate">วันที่</label><input id="sgDate" type="date"></div>
+              <div class="field"><label for="sgTime">เวลา</label><input id="sgTime" type="time"></div>
+            </div>
+            <div class="grid2" style="margin-bottom:10px">
+              <div class="field"><label for="sgFasting">งด/ไม่งดอาหาร</label>
+                <select id="sgFasting">
+                  <option value="fast8">งดครบ 8 ชั่วโมง</option>
+                  <option value="notfast">ไม่ได้งดครบ 8 ชั่วโมง</option>
+                  <option value="unsure">ไม่แน่ใจ</option>
+                </select></div>
+              <div class="field"><label for="sgValue">ค่าน้ำตาลปลายนิ้ว (mg/dL)</label><input id="sgValue" type="number" inputmode="numeric"></div>
+            </div>
+            <button class="btn btn-primary" id="sgSave">บันทึกค่าน้ำตาล</button>
+            <div class="table-wrap" style="margin-top:12px"><table>
+              <thead><tr><th>วันที่</th><th>เวลา</th><th>งด/ไม่งด</th><th>น้ำตาล</th><th>ผล</th></tr></thead>
+              <tbody id="sgRows"></tbody>
+            </table></div>
+          </div>
+          <h3 style="margin-top:22px">บันทึกประจำวัน 7 วัน</h3>
+          <p class="note">บันทึกอาการประจำวันของแต่ละวัน</p>
+          <div class="grid2" style="margin-top:10px">
+            <div class="field"><label for="dDay">วันที่</label><select id="dDay"></select></div>
+            <div class="field"><label for="dSymptom">อาการหรือข้อสังเกตประจำวัน</label><textarea id="dSymptom" placeholder="เช่น เวียนศีรษะ ปวดศีรษะ หรือไม่มีอาการ"></textarea></div>
+          </div>
+          <div class="grid2" style="margin-top:16px">
+            <button class="btn btn-primary" id="dSave">บันทึกประจำวัน</button>
+            <span></span>
+          </div>
+          <div class="table-wrap" style="margin-top:12px">
+            <table>
+              <thead><tr><th>วัน</th><th>อาการ</th><th>น้ำตาล</th></tr></thead>
+              <tbody id="dRows"></tbody>
+            </table>
+          </div>
         </div>
         <div class="card">
           <div class="table-wrap">
@@ -562,53 +596,10 @@
           </div>
         </div>
         <div class="card card-gap">
-          <h3>บันทึกความดันรายครั้ง</h3>
-          <p class="note">หมายเหตุ: วัดด้วยเครื่องเดิม คนเดิม และเวลาเดิมทุกครั้ง (ช่วงเช้าไม่เกิน 2 ครั้ง และช่วงเย็นไม่เกิน 2 ครั้ง)</p>
-          <div class="grid2">
-            <div class="field"><label for="blDate">วันที่วัด</label><input id="blDate" type="date"></div>
-            <div class="field"><label for="blTime">เวลาที่วัด</label><input id="blTime" type="time"></div>
-            <div class="field"><label for="blSys">ความดันตัวบน</label><input id="blSys" type="number" inputmode="numeric"></div>
-            <div class="field"><label for="blDia">ความดันตัวล่าง</label><input id="blDia" type="number" inputmode="numeric"></div>
-          </div>
-          <p class="note" id="blCount" style="margin-top:10px"></p>
-          <div class="grid2" style="margin-top:16px">
-            <button class="btn btn-primary" id="blSave">บันทึกความดัน</button>
-            <span></span>
-          </div>
-          <div class="table-wrap" style="margin-top:12px">
-            <table>
-              <thead><tr><th>วันที่</th><th>เวลา</th><th>ความดัน (mmHg)</th></tr></thead>
-              <tbody id="blRows"></tbody>
-            </table>
-          </div>
-        </div>
-        <div class="card card-gap">
           <h3>แนวโน้มความดัน (แรกรับ และ BP Home 7 วัน)</h3>
           <div class="day-strip" id="pdStrip"></div>
           <div id="pdChart"></div>
           <p class="note">เส้นประสีแดงคือเกณฑ์ความดันตัวบน 140 mmHg</p>
-        </div>
-        <div class="card card-gap">
-          <h3>ติดตามเบาหวานรายครั้ง</h3>
-          <p class="note">สำหรับผู้ที่สงสัยป่วยเบาหวาน บันทึกค่าน้ำตาลปลายนิ้วทุกครั้งที่วัด</p>
-          <div class="grid2" style="margin-bottom:10px">
-            <div class="field"><label for="sgDate">วันที่</label><input id="sgDate" type="date"></div>
-            <div class="field"><label for="sgTime">เวลา</label><input id="sgTime" type="time"></div>
-          </div>
-          <div class="grid2" style="margin-bottom:10px">
-            <div class="field"><label for="sgFasting">งด/ไม่งดอาหาร</label>
-              <select id="sgFasting">
-                <option value="fast8">งดครบ 8 ชั่วโมง</option>
-                <option value="notfast">ไม่ได้งดครบ 8 ชั่วโมง</option>
-                <option value="unsure">ไม่แน่ใจ</option>
-              </select></div>
-            <div class="field"><label for="sgValue">ค่าน้ำตาลปลายนิ้ว (mg/dL)</label><input id="sgValue" type="number" inputmode="numeric"></div>
-          </div>
-          <button class="btn btn-primary" id="sgSave">บันทึกค่าน้ำตาล</button>
-          <div class="table-wrap" style="margin-top:12px"><table>
-            <thead><tr><th>วันที่</th><th>เวลา</th><th>งด/ไม่งด</th><th>น้ำตาล</th><th>ผล</th></tr></thead>
-            <tbody id="sgRows"></tbody>
-          </table></div>
         </div>
         <div class="card card-gap">
           <h3>ประวัติการติดตาม</h3>

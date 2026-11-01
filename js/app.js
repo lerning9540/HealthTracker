@@ -12,7 +12,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>'
 const fmtDate = iso => { const [y,m,d] = iso.split('-').map(Number); return `${d} ${TH_MONTHS[m-1]} ${y+543}`; };
 
 // เร่งด่วน: SBP ≥180 และ DBP ≥110 ต้องส่งพบแพทย์
-// สงสัยป่วย: ความดัน 140–179 หรือ 90–109, น้ำตาลงดอาหาร 8 ชม. ≥126 เข้าติดตาม (BP Home 7 วัน)
+// สงสัยป่วย: ความดัน SBP 140–179 และ DBP 90–109 (ต้องเข้าทั้งสองค่า), น้ำตาลงดอาหาร 8 ชม. ≥126 เข้าติดตาม (BP Home 7 วัน)
 // น้ำตาลไม่ได้งดอาหาร ≥110 ให้เจาะซ้ำพรุ่งนี้โดยงดอาหาร 8 ชม.
 // ผู้ที่เป็นโรคประจำตัวแล้ว (ติ๊กในหน้าคัดกรอง) ไม่ต้องคัดกรองโรคนั้นซ้ำ จึงไม่นับค่าของโรคนั้น
 function sugarRisk(r){ return !(r.answers || {}).fDxDm && r.fbs>=126 && (r.answers || {}).fFasting === 'fast8'; }
@@ -78,7 +78,7 @@ function isValidEmail(s){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s); }
 // สีส้ม = รอติดตามซ้ำ (recheck) สีแดง = รอพบแพทย์ (refer)
 // ผู้ที่ต้องส่งเมล: สถานะไม่ปกติ หรือค่าเฉลี่ย BP Home 7 วันเข้าเกณฑ์ (140–179/90–109 หรือเร่งด่วน)
 function bpHomeQualifies(r){
-  const avg = bpHomeAverage(bpHomeFor(r.id));
+  const avg = bpHomeAverage(bpHomeFor(r.id), r.answers);
   return !!avg && bpLevel({ sbp: avg.sys, dbp: avg.dia }) !== 'normal';
 }
 function needsAlert(r){ return statusOf(r) !== 'normal' || bpHomeQualifies(r); }
@@ -87,7 +87,7 @@ function needsAlert(r){ return statusOf(r) !== 'normal' || bpHomeQualifies(r); }
 function buildAlertMessage(r, st){
   const a = r.answers || {};
   const groups = clinicalOf(r).keys.filter(k => k !== 'normal').map(k => CLINICAL_LABEL[k]);
-  const avg = bpHomeAverage(bpHomeFor(r.id));
+  const avg = bpHomeAverage(bpHomeFor(r.id), r.answers);
   const avgLevel = avg ? bpLevel({ sbp: avg.sys, dbp: avg.dia }) : 'normal';
   const urgentLevel = r.dbp >= 120 && r.sbp >= 180 ? 'ฉุกเฉิน' : 'กึ่งวิกฤต';
   if(st === 'refer') groups.unshift(urgentLevel);
@@ -104,7 +104,7 @@ function buildAlertMessage(r, st){
     '',
     'ค่าที่ประเมินได้ในครั้งนั้น:'
   ];
-  if(r.sbp >= 140 || r.dbp >= 90) lines.push('- ความดัน: ' + r.sbp + '/' + r.dbp + ' mmHg');
+  if(bpLevel(r) !== 'normal') lines.push('- ความดัน: ' + r.sbp + '/' + r.dbp + ' mmHg');
   if(sugarRisk(r) || needsRetest(r)) lines.push('- เบาหวาน: น้ำตาล ' + r.fbs + ' mg/dL, ' + (a.fFasting === 'fast8' ? 'งดอาหาร 8 ชม.' : 'ไม่ได้งดอาหาร 8 ชม.'));
   if(avg && avgLevel !== 'normal') lines.push('- BP Home เฉลี่ย 7 วัน: ' + avg.sys + '/' + avg.dia + ' mmHg');
   lines.push(
@@ -214,11 +214,11 @@ function bpHomeFor(recordId){
 }
 // ค่าเฉลี่ย 7 วัน: รวมค่าทั้งหมดที่วัด หารด้วย 28 (4 ครั้ง/วัน × 7 วัน) ทั้งตัวบนและตัวล่าง ตัดทศนิยมทิ้ง
 // จัดกลุ่มด้วยเกณฑ์ความดันเดียวกับการคัดกรอง (ต้องเข้าทั้งตัวบนและตัวล่าง)
-function bpHomeAverage(list){
+function bpHomeAverage(list, answers){
   if(!list.length) return null;
   const sys = Math.floor(list.reduce((a, x) => a + x.systolic, 0) / 28);
   const dia = Math.floor(list.reduce((a, x) => a + x.diastolic, 0) / 28);
-  return { sys, dia, days: new Set(list.map(x => x.day_number)).size, elevated: bpLevel({ sbp: sys, dbp: dia }) !== 'normal' };
+  return { sys, dia, days: new Set(list.map(x => x.day_number)).size, elevated: bpLevel({ sbp: sys, dbp: dia, answers: answers || {} }) !== 'normal' };
 }
 function openBp(recordId){
   const r = records.find(x => x.id === recordId);
@@ -226,6 +226,8 @@ function openBp(recordId){
   $('bpCard').dataset.record = recordId;
   $('bpName').textContent = displayName(r) || r.code;
   $('bpDate').value = todayIso();
+  $('sgDate').value = todayIso();
+  $('sgTime').value = new Date().toTimeString().slice(0, 5);
   $('bpSys').value = '';
   $('bpDia').value = '';
   $('bpSave').hidden = !canView('fu_record');
@@ -247,7 +249,7 @@ function renderBp(){
   const id = $('bpCard').dataset.record;
   if(!id) return;
   const list = bpHomeFor(id);
-  const avg = bpHomeAverage(list);
+  const avg = bpHomeAverage(list, (records.find(x => x.id === id) || {}).answers);
   $('bpStrip').innerHTML = dayStripHtml(list);
 
   // ให้บันทึกได้เฉพาะวันถัดไปที่ยังไม่ได้วัด โดยวันที่ล็อกเป็นวันต่อวันหลังวันคัดกรอง
@@ -265,6 +267,7 @@ function renderBp(){
   $('bpSummary').innerHTML = avg
     ? `ค่าเฉลี่ย <b>${avg.sys}/${avg.dia}</b> mmHg จาก ${avg.days} วัน · <span class="badge ${avg.elevated ? 'b-bad' : 'b-ok'}">${avg.elevated ? 'เข้าเกณฑ์ ควรติดตามประเมินผล' : 'ยังไม่เข้าเกณฑ์ (ปกติ)'}</span>`
     : 'ยังไม่มีข้อมูลการวัดที่บ้าน';
+  if(rec) renderDaily(id, rec);
 }
 async function saveBp(){
   if(!canView('fu_record')){ toast('บันทึกได้เฉพาะ อสม.'); return; }
@@ -296,8 +299,21 @@ const NURSE_STATUS = [
   ['referred_to_doctor', 'ประสานส่งต่อพบแพทย์แล้ว'],
   ['follow_up_needed', 'ติดตามเพิ่มเติม']
 ];
-let bpLogs = [];
+// ---- บันทึกประจำวัน 7 วัน (อยู่ในการ์ด BP Home): อาการ และค่าน้ำตาลของผู้ที่สงสัยป่วยเบาหวาน ----
+let dailyLogs = [];
+async function loadDailyLogs(){
+  const { data, error } = await sb.from('daily_logs').select('record_id, day_number, measured_at, symptom');
+  if(error){ toast('โหลดบันทึกประจำวันไม่สำเร็จ: ' + error.message); return; }
+  dailyLogs = data;
+}
+function dailyLogsFor(recordId){
+  return dailyLogs.filter(x => x.record_id === recordId).sort((a, b) => a.day_number - b.day_number);
+}
+// ---- ติดตามเบาหวานรายครั้ง (อยู่ในการ์ด BP Home): เฉพาะผู้ที่สงสัยป่วยเบาหวาน ----
 let sugarLogs = [];
+function needsSugar(r){
+  return !(r.answers || {}).fDxDm && (sugarRisk(r) || needsRetest(r));
+}
 async function loadSugarLogs(){
   const { data, error } = await sb.from('sugar_logs').select('record_id, measured_at, measured_time, fasting, fbs').order('measured_at');
   if(error){ toast('โหลดติดตามเบาหวานไม่สำเร็จ: ' + error.message); return; }
@@ -313,7 +329,7 @@ function sugarFlag(x){
 }
 async function saveSugar(){
   if(!canView('fu_record')){ toast('บันทึกได้เฉพาะ อสม.'); return; }
-  const id = currentPatientId;
+  const id = $('bpCard').dataset.record;
   const measured_at = $('sgDate').value;
   const measured_time = $('sgTime').value;
   const fasting = $('sgFasting').value;
@@ -329,7 +345,7 @@ async function saveSugar(){
   toast('บันทึกค่าน้ำตาลแล้ว');
 }
 function renderSugar(){
-  const id = currentPatientId;
+  const id = $('bpCard').dataset.record;
   if(!id) return;
   const list = sugarLogsFor(id).slice().reverse();
   $('sgRows').innerHTML = list.length ? list.map(x => `<tr>
@@ -341,49 +357,41 @@ function renderSugar(){
     </tr>`).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:12px">ยังไม่มีการบันทึกน้ำตาล</td></tr>';
   $('sgSave').hidden = !canView('fu_record');
 }
-async function loadBpLogs(){
-  const { data, error } = await sb.from('bp_logs').select('record_id, measured_at, measured_time, session, systolic, diastolic').order('measured_at');
-  if(error){ toast('โหลดบันทึกความดันไม่สำเร็จ: ' + error.message); return; }
-  bpLogs = data;
+// ---- บันทึกประจำวัน 7 วัน (อยู่ในการ์ด BP Home): อาการประจำวัน ----
+async function saveDaily(){
+  if(!canView('fu_record')){ toast('บันทึกได้เฉพาะ อสม.'); return; }
+  const id = $('bpCard').dataset.record;
+  const rec = records.find(x => x.id === id);
+  if(!rec) return;
+  const day = Number($('dDay').value);
+  const symptom = $('dSymptom').value.trim();
+  if(!symptom){ toast('กรุณากรอกอาการประจำวัน'); return; }
+  const row = { record_id: id, day_number: day, measured_at: addDays(rec.date, day), symptom };
+  const { error } = await sb.from('daily_logs').upsert(row, { onConflict: 'record_id,day_number' });
+  if(error){ toast('บันทึกไม่สำเร็จ: ' + error.message); return; }
+  dailyLogs = dailyLogs.filter(x => !(x.record_id === id && x.day_number === day)).concat(row);
+  $('dSymptom').value = '';
+  renderBp();
+  toast('บันทึกประจำวันแล้ว');
 }
-// วันละไม่เกิน 2 ครั้งช่วงเช้า และ 2 ครั้งช่วงเย็น โดยแยกช่วงจากเวลาที่วัด (ก่อน 12:00 = เช้า)
+function renderDaily(id, rec){
+  const logs = dailyLogsFor(id);
+  const done = new Set(logs.map(x => x.day_number));
+  const next = [1,2,3,4,5,6,7].find(d => !done.has(d)) || 7;
+  $('dDay').innerHTML = [1,2,3,4,5,6,7].map(d => `<option value="${d}">วันที่ ${d}${done.has(d) ? ' (บันทึกแล้ว)' : ''}</option>`).join('');
+  $('dDay').value = next;
+  $('sgBox').hidden = !needsSugar(rec);
+  renderSugar();
+  $('dRows').innerHTML = [1,2,3,4,5,6,7].map(day => {
+    const x = logs.find(l => l.day_number === day);
+    return `<tr><td>วันที่ ${day}</td><td>${x && x.symptom ? esc(x.symptom) : '-'}</td></tr>`;
+  }).join('');
+  $('dSave').hidden = !canView('fu_record');
+}
 // ชื่อที่แสดงในระบบ มีคำนำหน้าถ้าเลือกไว้ตอนคัดกรอง
 function displayName(r){
   const prefix = (r.answers || {}).pPrefix || '';
   return [prefix, r.name || ''].filter(Boolean).join(' ');
-}
-const BP_LOG_MAX_PER_SESSION = 2;
-function sessionOf(time){ return time.slice(0, 5) < '12:00' ? 'เช้า' : 'เย็น'; }
-function renderLogs(){
-  const day = $('blDate').value;
-  const list = bpLogs.filter(x => x.record_id === currentPatientId).slice().reverse();
-  const dayRows = list.filter(x => x.measured_at === day && x.measured_time);
-  const morning = dayRows.filter(x => sessionOf(x.measured_time) === 'เช้า').length;
-  $('blCount').textContent = `วันที่เลือก: เช้า ${morning} / ${BP_LOG_MAX_PER_SESSION} ครั้ง · เย็น ${dayRows.length - morning} / ${BP_LOG_MAX_PER_SESSION} ครั้ง`;
-  $('blRows').innerHTML = list.length ? list.map(x => `<tr>
-      <td>${fmtDate(x.measured_at)}</td><td>${x.measured_time ? esc(x.measured_time.slice(0, 5)) : esc(x.session || '-')}</td><td>${x.systolic}/${x.diastolic}</td>
-    </tr>`).join('') : '<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px">ยังไม่มีการบันทึก</td></tr>';
-}
-async function saveLog(){
-  if(!canView('fu_record')){ toast('บันทึกความดันได้เฉพาะ อสม.'); return; }
-  const sys = parseInt($('blSys').value, 10);
-  const dia = parseInt($('blDia').value, 10);
-  const measured_at = $('blDate').value;
-  const measured_time = $('blTime').value;
-  if(!sys || !dia){ toast('กรุณากรอกค่าความดันให้ครบ'); return; }
-  if(!measured_at){ toast('กรุณาเลือกวันที่วัด'); return; }
-  if(!measured_time){ toast('กรุณาเลือกเวลาที่วัด'); return; }
-  const session = sessionOf(measured_time);
-  const sameSession = bpLogs.filter(x => x.record_id === currentPatientId && x.measured_at === measured_at && x.measured_time && sessionOf(x.measured_time) === session).length;
-  if(sameSession >= BP_LOG_MAX_PER_SESSION){ toast(`วันที่เลือกบันทึกช่วง${session}ครบ ${BP_LOG_MAX_PER_SESSION} ครั้งแล้ว`); return; }
-  const row = { record_id: currentPatientId, measured_at, measured_time, systolic: sys, diastolic: dia };
-  const { error } = await sb.from('bp_logs').insert(row);
-  if(error){ toast('บันทึกไม่สำเร็จ: ' + error.message); return; }
-  bpLogs.push(row);
-  $('blSys').value = '';
-  $('blDia').value = '';
-  renderLogs();
-  toast('บันทึกความดันแล้ว');
 }
 async function saveNurse(){
   if(!canView('followup')){ toast('เฉพาะพยาบาลบันทึกสถานะได้'); return; }
@@ -431,7 +439,6 @@ async function deletePatient(){
   toast('ลบข้อมูลแล้ว');
 }
 $('pdDelete').addEventListener('click', deletePatient);
-$('blSave').addEventListener('click', saveLog);
 
 // ---- การแจ้งเตือน ----
 let acks = [];
@@ -454,7 +461,7 @@ function notifyItems(){
     if(needsRetest(r)) items.push({ key:'RETEST', type:'RETEST', r });
     const st = statusOf(r);
     if(st === 'normal') return;
-    const avg = bpHomeAverage(bpHomeFor(r.id));
+    const avg = bpHomeAverage(bpHomeFor(r.id), r.answers);
     const days = avg ? avg.days : 0;
     if(st === 'refer') { if(!isReferred(r)) items.push({ key:'URGENT', type:'URGENT', r }); }
     else items.push({ key:'SUSPECTED', type:'SUSPECTED', r });
@@ -536,7 +543,7 @@ function renderPatient(){
   if(!r){ setView('register'); return; }
   const st = statusOf(r);
   const list = bpHomeFor(r.id);
-  const avg = bpHomeAverage(list);
+  const avg = bpHomeAverage(list, r.answers);
   const fus = followUps.filter(f => f.record_id === r.id).sort((a, b) => b.visited_at.localeCompare(a.visited_at));
   $('pdHead').innerHTML = `<div><h2>${esc(displayName(r) || '-')}</h2><p>รหัส ${esc(r.code)} · อายุ ${esc(r.age || '-')} ปี · คัดกรองวันที่ ${fmtDate(r.date)}</p></div>
     <span class="badge ${badgeOf(r)[0]}">${badgeOf(r)[1]}</span>`;
@@ -548,9 +555,6 @@ function renderPatient(){
     <div class="kpi"><div class="label">การงดน้ำ อาหาร</div><div class="value c-teal" style="font-size:18px">${FAST_LABEL[r.answers.fFasting] || '-'}</div><div class="sub">${r.answers.fFasting === 'fast8' ? 'ไม่ต้องถามเวลาทานอาหาร' : (MEAL_LABEL[r.answers.fMeal] ? 'ทานครั้งล่าสุด ' + MEAL_LABEL[r.answers.fMeal] : 'ไม่ได้บันทึกเวลาทานอาหาร')}</div></div>`;
   $('pdStrip').innerHTML = dayStripHtml(list);
   $('pdChart').innerHTML = trendSvg(r, list);
-  $('sgDate').value = todayIso();
-  $('sgTime').value = new Date().toTimeString().slice(0, 5);
-  renderSugar();
   $('nsStatus').innerHTML = NURSE_STATUS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
   $('nsStatus').value = r.nurse_status || 'pending_review';
   $('nsNote').value = r.nurse_note || '';
@@ -560,12 +564,6 @@ function renderPatient(){
   $('pdDate').value = r.date;
   $('nsStatus').disabled = !canView('followup');
   $('nsNote').disabled = !canView('followup');
-  $('blDate').value = todayIso();
-  $('blTime').value = new Date().toTimeString().slice(0, 5);
-  $('blSys').value = '';
-  $('blDia').value = '';
-  $('blSave').hidden = !canView('fu_record');
-  renderLogs();
   $('pdFollow').innerHTML = fus.length ? fus.map(f => `<tr>
       <td>${fmtDate(f.visited_at)}</td><td>${esc(f.result)}</td><td>${esc(f.note || '-')}</td>
     </tr>`).join('') : '<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px">ยังไม่มีการติดตาม</td></tr>';
@@ -776,7 +774,7 @@ async function loadData(){
   await loadRecordsRemote();
   await loadFollowUps();
   await loadBpHome();
-  await loadBpLogs();
+  await loadDailyLogs();
   await loadSugarLogs();
   await loadAcks();
   if(canView('admin')) await loadUsers();
@@ -1000,7 +998,6 @@ function toggleMeal(){
   if(fast) $('fMeal').value = '';
 }
 $('fFasting').addEventListener('change', toggleMeal);
-$('blDate').addEventListener('change', renderLogs);
 
 function clearFields(){
   $('pPrefix').value = '';
@@ -1453,7 +1450,8 @@ $('fHour').innerHTML = range(0,23).map(h => opt(pad(h), pad(h))).join('');
 $('fMinute').innerHTML = range(0,59).map(m => opt(pad(m), pad(m))).join('');
 
 setDefaults();
-fillMock();
+// ค่าตัวอย่างใช้เฉพาะตอนทดสอบ: เปิดด้วย ?test ที่ท้ายลิงก์เท่านั้น
+if(new URLSearchParams(location.search).has('test')) fillMock();
 renderDashboard();
 
 $('fDrink').addEventListener('change', toggleQuitYears);
@@ -1498,6 +1496,7 @@ $('fuRows').addEventListener('click', e => {
   if(bp) openBp(bp.dataset.bphome);
 });
 $('bpSave').addEventListener('click', saveBp);
+$('dSave').addEventListener('click', saveDaily);
 $('sgSave').addEventListener('click', saveSugar);
 $('bpClose').addEventListener('click', closeBp);
 loadAlertForm();
