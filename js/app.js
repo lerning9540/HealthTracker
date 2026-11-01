@@ -1106,12 +1106,20 @@ function closeSidebar(){ openSidebar(false); }
 
 
 // ---- รายงาน ----
+// กรองช่วงเลขทะเบียน (ตั้งแต่ ถึง) เทียบแบบตัวเลขถ้าเป็นตัวเลข เช่น 9 มาก่อน 10
+function codeInRange(code, from, to){
+  const cmp = (a, b) => String(a || '').localeCompare(String(b || ''), 'th', { numeric: true });
+  return (!from || cmp(code, from) >= 0) && (!to || cmp(code, to) <= 0);
+}
+// ใช้ร่วมกันทั้งตารางรายงาน การพิมพ์ และการส่งออก Excel
 function filteredRecords(){
   const from = $('rFrom').value, to = $('rTo').value, st = $('rStatus').value;
+  const codeFrom = $('rpCodeFrom').value.trim(), codeTo = $('rpCodeTo').value.trim();
   return records.filter(r =>
     (!from || r.date >= from) &&
     (!to || r.date <= to) &&
-    (st === 'all' || statusOf(r) === st)
+    (st === 'all' || statusOf(r) === st) &&
+    codeInRange(r.code, codeFrom, codeTo)
   );
 }
 
@@ -1151,11 +1159,7 @@ function csvCell(v){
 }
 
 function exportCsv(){
-  // กรองช่วงเลขทะเบียน (ตั้งแต่ ถึง) เทียบแบบตัวเลขถ้าเป็นตัวเลข เช่น 9 มาก่อน 10
-  const from = $('rpCodeFrom').value.trim();
-  const to = $('rpCodeTo').value.trim();
-  const cmp = (a, b) => String(a || '').localeCompare(String(b || ''), 'th', { numeric: true });
-  const list = filteredRecords().filter(r => (!from || cmp(r.code, from) >= 0) && (!to || cmp(r.code, to) <= 0));
+  const list = filteredRecords();
   if(!list.length){ toast('ไม่มีข้อมูลให้ส่งออก'); return; }
   const head = ['วันที่','รหัส','ชื่อ-สกุล','อายุ','ความดันตัวบน','ความดันตัวล่าง','น้ำตาลในเลือด','ผลคัดกรอง','ผลการประเมินทางคลินิก','การงดน้ำ อาหาร','เวลาทานอาหารล่าสุด'];
   const rows = list.map(r => {
@@ -1503,6 +1507,7 @@ $('fDrink').addEventListener('change', toggleQuitYears);
 $('fSmoke').addEventListener('change', toggleQuitYears);
 toggleQuitYears();
 ['rFrom','rTo','rStatus'].forEach(id => $(id).addEventListener('change', renderReport));
+['rpCodeFrom','rpCodeTo'].forEach(id => $(id).addEventListener('input', renderReport));
 $('rTo').value = new Date().toISOString().slice(0,10);
 $('btnExport').addEventListener('click', exportCsv);
 $('btnPrint').addEventListener('click', () => window.print());
