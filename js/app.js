@@ -17,12 +17,13 @@ const fmtDate = iso => { const [y,m,d] = iso.split('-').map(Number); return `${d
 // ผู้ที่เป็นโรคประจำตัวแล้ว (ติ๊กในหน้าคัดกรอง) ไม่ต้องคัดกรองโรคนั้นซ้ำ จึงไม่นับค่าของโรคนั้น
 function sugarRisk(r){ return !(r.answers || {}).fDxDm && r.fbs>=126 && (r.answers || {}).fFasting === 'fast8'; }
 function needsRetest(r){ return !(r.answers || {}).fDxDm && r.fbs>=110 && (r.answers || {}).fFasting !== 'fast8'; }
-// ความดันตามเกณฑ์ลูกค้า (แก้ไขครั้งที่ 1): ต้องเข้าเกณฑ์ SBP และ DBP พร้อมกัน
-// เร่งด่วน = SBP ≥180 และ DBP ≥110 | สงสัยป่วย = SBP 140–179 และ DBP 90–109 | นอกนั้นยังไม่เข้าเกณฑ์
+// ความดันตามเกณฑ์ลูกค้า (แก้ไขครั้งที่ 1): เร่งด่วนต้องเข้าทั้งสองค่า
+// เร่งด่วน = SBP ≥180 และ DBP ≥110 | สงสัยป่วย = SBP 140–179 และ DBP ≥90 (รวมกรณี DBP ≥110 ตามคำขอลูกค้า) | นอกนั้นยังไม่เข้าเกณฑ์
 // ผู้ที่เป็นความดันโลหิตสูงอยู่แล้วไม่นับ "สงสัยป่วย" แต่ยังแจ้งเร่งด่วนหากค่าสูงมาก
 function bpLevel(r){
   if(r.sbp>=180 && r.dbp>=110) return 'refer';
-  if(!(r.answers || {}).fDxHtn && r.sbp>=140 && r.sbp<=179 && r.dbp>=90 && r.dbp<=109) return 'recheck';
+  // ตามคำขอของลูกค้า: SBP 140–179 ที่ DBP ≥110 ก็เข้ากลุ่มสงสัยความดันโลหิตสูงด้วย
+  if(!(r.answers || {}).fDxHtn && r.sbp>=140 && r.sbp<=179 && r.dbp>=90) return 'recheck';
   return 'normal';
 }
 // สถานะกลาง ใช้ร่วมกันทั้งระบบ (การ์ด ตัวกรอง กระดิ่ง อีเมล กล่องผลลัพธ์ รายงาน)
@@ -224,6 +225,7 @@ function openBp(recordId){
   const r = records.find(x => x.id === recordId);
   if(!r) return;
   $('bpCard').dataset.record = recordId;
+  bpEditing = null;
   $('bpName').textContent = displayName(r) || r.code;
   $('bpDate').value = todayIso();
   $('bpTime').value = new Date().toTimeString().slice(0, 5);
@@ -237,6 +239,7 @@ function openBp(recordId){
   $('bpCard').scrollIntoView({ behavior:'smooth', block:'center' });
 }
 function closeBp(){
+  bpEditing = null;
   $('bpCard').hidden = true;
   delete $('bpCard').dataset.record;
 }
@@ -249,6 +252,19 @@ function dayStripHtml(list){
 const BP_HOME_MAX_PER_SESSION = 2;
 // เช้า = วัดก่อน 12:00 น. เย็น = ตั้งแต่ 12:00 น.
 function sessionOf(time){ return time.slice(0, 5) < '12:00' ? 'เช้า' : 'เย็น'; }
+// แก้ไขย้อนหลัง: กดปุ่มแก้ไขข้างแถวการวัด ค่าจะถูกใส่ในฟอร์ม แล้วกดบันทึกการแก้ไข (วันที่ของแถวนั้นไม่เปลี่ยน)
+let bpEditing = null;
+let bpCurrent = [];
+function startEditBp(i){
+  const x = bpCurrent[i];
+  if(!x) return;
+  bpEditing = x;
+  $('bpTime').value = x.measured_time ? x.measured_time.slice(0, 5) : '';
+  $('bpSys').value = x.systolic;
+  $('bpDia').value = x.diastolic;
+  renderBp();
+  $('bpSys').focus();
+}
 function renderBp(){
   const id = $('bpCard').dataset.record;
   if(!id) return;
@@ -263,17 +279,21 @@ function renderBp(){
     const morning = hits.filter(x => sessionOf(x.measured_time) === 'เช้า').length;
     return { morning, evening: hits.length - morning };
   };
+  bpCurrent = list;
   const open = [1,2,3,4,5,6,7].filter(d => { const c = counts(d); return c.morning < BP_HOME_MAX_PER_SESSION || c.evening < BP_HOME_MAX_PER_SESSION; });
   const prev = Number($('bpDay').value);
-  const day = open.includes(prev) ? prev : open[0];
-  $('bpDay').innerHTML = open.length ? open.map(d => `<option value="${d}">วันที่ ${d}</option>`).join('') : '<option value="">ครบทุกวันแล้ว</option>';
+  const day = bpEditing ? bpEditing.day_number : (open.includes(prev) ? prev : open[0]);
+  const days = bpEditing ? [1,2,3,4,5,6,7] : open;
+  $('bpDay').innerHTML = days.length ? days.map(d => `<option value="${d}">วันที่ ${d}</option>`).join('') : '<option value="">ครบทุกวันแล้ว</option>';
   $('bpDay').value = day || '';
+  $('bpDay').disabled = !!bpEditing;
   $('bpDate').value = day && rec ? addDays(rec.date, day) : '';
   $('bpDate').disabled = true;
-  $('bpSave').disabled = !day;
+  $('bpSave').disabled = !day && !bpEditing;
+  $('bpSave').textContent = bpEditing ? 'บันทึกการแก้ไข' : 'บันทึกการวัด';
   $('bpRows').innerHTML = [1,2,3,4,5,6,7].map(d => {
     const hits = list.filter(x => x.day_number === d);
-    const text = hits.map(x => `${x.measured_time ? x.measured_time.slice(0, 5) : '-'} ${x.systolic}/${x.diastolic}`).join('<br>');
+    const text = hits.map(x => `<div>${x.measured_time ? x.measured_time.slice(0, 5) : '-'} ${x.systolic}/${x.diastolic} <button class="btn-ghost" data-edit-bp="${list.indexOf(x)}">แก้ไข</button></div>`).join('');
     return `<tr><td>วันที่ ${d}</td><td>${hits.length ? fmtDate(hits[0].measured_at) : '-'}</td><td>${text || '-'}</td></tr>`;
   }).join('');
   const sel = day ? counts(day) : null;
@@ -287,6 +307,34 @@ async function saveBp(){
   if(!canView('fu_record')){ toast('บันทึกได้เฉพาะ อสม.'); return; }
   const id = $('bpCard').dataset.record;
   const rec = records.find(x => x.id === id);
+  if(bpEditing){
+    const old = bpEditing;
+    const sysEdit = parseInt($('bpSys').value, 10);
+    const diaEdit = parseInt($('bpDia').value, 10);
+    const timeEdit = $('bpTime').value;
+    if(!sysEdit || !diaEdit){ toast('กรุณากรอกค่าความดันให้ครบ'); return; }
+    if(!timeEdit){ toast('กรุณาเลือกเวลาที่วัด'); return; }
+    const sessionEdit = sessionOf(timeEdit);
+    const sameEdit = bpHomeFor(id).filter(x => x !== old && x.day_number === old.day_number && x.measured_time && sessionOf(x.measured_time) === sessionEdit).length;
+    if(sameEdit >= BP_HOME_MAX_PER_SESSION){ toast(`วันที่ ${old.day_number} บันทึกช่วง${sessionEdit}ครบ ${BP_HOME_MAX_PER_SESSION} ครั้งแล้ว`); return; }
+    let q = sb.from('bp_home_readings').update({ measured_time: timeEdit, systolic: sysEdit, diastolic: diaEdit })
+      .eq('record_id', id).eq('day_number', old.day_number).eq('measured_at', old.measured_at)
+      .eq('systolic', old.systolic).eq('diastolic', old.diastolic);
+    q = old.measured_time ? q.eq('measured_time', old.measured_time) : q.is('measured_time', null);
+    const { error } = await q;
+    if(error){ toast('แก้ไขไม่สำเร็จ: ' + error.message); return; }
+    old.measured_time = timeEdit;
+    old.systolic = sysEdit;
+    old.diastolic = diaEdit;
+    bpEditing = null;
+    $('bpSys').value = '';
+    $('bpDia').value = '';
+    maybeAlert(rec);
+    renderBp();
+    renderFollowUp();
+    toast('แก้ไขการวัดแล้ว');
+    return;
+  }
   const day = Number($('bpDay').value);
   const sys = parseInt($('bpSys').value, 10);
   const dia = parseInt($('bpDia').value, 10);
@@ -665,6 +713,18 @@ async function loadFollowUps(){
   followUps = data;
 }
 
+// ค่าปัจจุบัน: ใช้ค่าความดันจาก BP Home และค่าน้ำตาลจากการติดตามล่าสุดที่บันทึก ถ้าไม่มีจึงใช้ค่าตอนคัดกรอง
+function latestOf(list, pick){
+  return list.slice().sort((a, b) => (a.measured_at + (a.measured_time || '')).localeCompare(b.measured_at + (b.measured_time || ''))).pop();
+}
+function currentBp(r){
+  const last = latestOf(bpHomeFor(r.id));
+  return last ? `${last.systolic}/${last.diastolic}` : `${r.sbp}/${r.dbp}`;
+}
+function currentFbs(r){
+  const last = latestOf(sugarLogsFor(r.id));
+  return last ? last.fbs : (r.fbs || '-');
+}
 function regList(){
   const q = $('regSearch').value.trim().toLowerCase();
   return records
@@ -690,8 +750,8 @@ function renderRegister(){
       <td class="code">${esc(r.code)}</td>
       <td>${esc(displayName(r))}</td>
       <td>${esc(r.age || '-')}</td>
-      <td>${r.sbp}/${r.dbp}</td>
-      <td>${r.fbs || '-'}</td>
+      <td>${currentBp(r)}</td>
+      <td>${currentFbs(r)}</td>
       <td>${esc(clinicalOf(r).label)}</td>
       <td><span class="badge ${badgeOf(r)[0]}">${badgeOf(r)[1]}</span></td>
       <td><button class="btn-ghost" data-detail="${esc(r.id)}">ดูรายละเอียด</button></td>
@@ -1562,6 +1622,10 @@ $('fuRows').addEventListener('click', e => {
 });
 $('bpSave').addEventListener('click', saveBp);
 $('bpDay').addEventListener('change', renderBp);
+$('bpRows').addEventListener('click', e => {
+  const i = e.target.dataset.editBp;
+  if(i !== undefined) startEditBp(Number(i));
+});
 $('dSave').addEventListener('click', saveDaily);
 $('sgSave').addEventListener('click', saveSugar);
 $('bpClose').addEventListener('click', closeBp);
