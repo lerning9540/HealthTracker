@@ -27,11 +27,11 @@ function bpLevel(r){
 }
 // สถานะกลาง ใช้ร่วมกันทั้งระบบ (การ์ด ตัวกรอง กระดิ่ง อีเมล กล่องผลลัพธ์ รายงาน)
 // เร่งด่วน = SBP ≥180 และ DBP ≥110 | ต้องติดตาม = ความดันสงสัยป่วยตามข้อ bpLevel หรือน้ำตาลเข้าเกณฑ์ (งดอาหาร ≥126, ไม่งดอาหาร ≥110)
-// ค่าปัจจุบันที่ใช้ประเมินสถานะ: ความดันใช้ค่า BP Home ล่าสุด (ถ้ามี) น้ำตาลใช้ค่าล่าสุดเมื่อบันทึกครบ 2 ครั้งแล้ว ไม่งั้นใช้ค่าตอนคัดกรอง
+// ค่าปัจจุบันที่ใช้ประเมินสถานะ: ความดันใช้ค่า BP Home ล่าสุด (ถ้ามี) น้ำตาลใช้ค่าล่าสุดที่บันทึก ถ้าไม่มีจึงใช้ค่าตอนคัดกรอง
 function currentOf(r){
   const bp = latestOf(bpHomeFor(r.id));
   const sgList = sugarLogsFor(r.id);
-  const sg = sgList.length >= 2 ? latestOf(sgList) : null;
+  const sg = sgList.length >= 1 ? latestOf(sgList) : null;
   const answers = Object.assign({}, r.answers || {});
   if(sg) answers.fFasting = sg.fasting;
   return Object.assign({}, r, {
@@ -69,8 +69,9 @@ function clinicalOf(r, orig){
   return { keys, label: keys.map(k => CLINICAL_LABEL[k]).join(' + ') };
 }
 function typeOf(r){
-  const bp = bpLevel(r) !== 'normal';
-  const sg = sugarRisk(r);
+  const c = currentOf(r);
+  const bp = bpLevel(c) !== 'normal';
+  const sg = sugarRisk(c);
   if(bp && sg) return 'ความดัน/เบาหวาน';
   if(bp) return 'ความดันโลหิต';
   if(sg) return 'เบาหวาน';
@@ -97,7 +98,9 @@ function isValidEmail(s){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s); }
 // ผู้ที่ต้องส่งเมล: สถานะไม่ปกติ หรือค่าเฉลี่ย BP Home 7 วันเข้าเกณฑ์ (ตัวบน ≥140 และตัวล่าง ≥90 หรือเร่งด่วน)
 function bpHomeQualifies(r){
   const avg = bpHomeAverage(bpHomeFor(r.id), r.answers);
-  return !!avg && bpLevel({ sbp: avg.sys, dbp: avg.dia }) !== 'normal';
+  // รอบ 2 ส่งเมลเมื่อครบ 7 วันเท่านั้น (ค่าเฉลี่ยหาร 28 จึงต้องมีครบทุกวันก่อน)
+  // รอบ 2 = ครบ 7 วันแล้ว และสถานะยังไม่ปกติอยู่ (ใช้ค่าปัจจุบัน)
+  return !!avg && avg.days >= 7 && statusOf(r) !== 'normal';
 }
 function needsAlert(r){ return statusOf(r) !== 'normal' || bpHomeQualifies(r); }
 
@@ -760,7 +763,7 @@ async function loadFollowUps(){
 }
 
 // ค่าปัจจุบัน: ใช้ค่าความดันจาก BP Home และค่าน้ำตาลจากการติดตามล่าสุดที่บันทึก ถ้าไม่มีจึงใช้ค่าตอนคัดกรอง
-function latestOf(list, pick){
+function latestOf(list){
   return list.slice().sort((a, b) => (a.measured_at + (a.measured_time || '')).localeCompare(b.measured_at + (b.measured_time || ''))).pop();
 }
 function currentBp(r){
@@ -768,7 +771,8 @@ function currentBp(r){
   return last ? `${last.systolic}/${last.diastolic}` : `${r.sbp}/${r.dbp}`;
 }
 function currentFbs(r){
-  const last = latestOf(sugarLogsFor(r.id));
+  const list = sugarLogsFor(r.id);
+  const last = list.length >= 1 ? latestOf(list) : null;
   return last ? last.fbs : (r.fbs || '-');
 }
 function regList(){
@@ -856,12 +860,22 @@ async function saveFollow(){
 }
 
 // ส่งออกทะเบียนพร้อมคำตอบแบบสอบถามทั้งชุด (คอลัมน์ตามชื่อช่องในฟอร์ม)
+// คอลัมน์คำตอบในไฟล์ Excel ใช้หัวข้อภาษาไทย (ไม่ใช้ชื่อฟิลด์) และข้ามช่องที่ซ้ำกับคอลัมน์หลักแล้ว
+const EXPORT_SKIP = ['pName','pPrefix','fNotes','fSbp','fDbp','fSugar'];
+const EXPORT_LABEL_FALLBACK = { fDay:'วันที่คัดกรอง (วัน)', fMonth:'วันที่คัดกรอง (เดือน)', fYear:'วันที่คัดกรอง (ปี)', fHour:'เวลาคัดกรอง (ชั่วโมง)', fMinute:'เวลาคัดกรอง (นาที)', fBmi:'ดัชนีมวลกาย (BMI)', fWeight:'น้ำหนัก (กก.)', fHeight:'ส่วนสูง (ซม.)' };
+function exportLabel(k){
+  const el = document.getElementById(k);
+  const t = document.querySelector(`label[for="${k}"]`)?.textContent.trim()
+    || el?.closest('label')?.textContent.trim()
+    || el?.getAttribute('aria-label');
+  return t || EXPORT_LABEL_FALLBACK[k] || k;
+}
 // ไฟล์ Excel ทั้งหน้าทะเบียนและหน้ารายงานใช้ฟังก์ชันนี้ร่วมกัน และใช้ค่าตอนคัดกรอง (orig = true)
 function exportRecordsCsv(list, fileLabel){
   if(!list.length){ toast('ไม่มีข้อมูลให้ส่งออก'); return; }
-  const keys = [...new Set(list.flatMap(r => Object.keys(r.answers || {})))];
+  const keys = [...new Set(list.flatMap(r => Object.keys(r.answers || {})))].filter(k => !EXPORT_SKIP.includes(k));
   const extra = ['ผลการประเมินทางคลินิก','การงดน้ำ อาหาร','เวลาทานอาหารล่าสุด'];
-  const head = ['วันที่','รหัส','ชื่อ-สกุล','อายุ','ความดันตัวบน','ความดันตัวล่าง','น้ำตาลในเลือด','ผลคัดกรอง', ...extra, ...keys];
+  const head = ['วันที่','รหัส','ชื่อ-สกุล','อายุ','ความดันตัวบน','ความดันตัวล่าง','น้ำตาลในเลือด','ผลคัดกรอง', ...extra, ...keys.map(exportLabel)];
   // ค่าที่เป็นข้อความตัวเลือกแปลงเป็นภาษาไทย และค่าจริง/เท็จเป็น ใช่/ไม่ใช่ ให้อ่านใน Excel ได้
   const show = (k, v) => {
     if(v === true) return 'ใช่';
@@ -1114,6 +1128,9 @@ async function evaluate(){
   const f = readForm();
   if(!f.name){ toast('กรุณากรอกชื่อ-นามสกุล'); return; }
   if(!f.sbp || !f.dbp){ toast('กรุณากรอกค่าความดันโลหิต'); return; }
+  // เตือนก่อนบันทึกซ้ำ: ชื่อเดียวกันและวันที่คัดกรองเดียวกันที่มีอยู่แล้ว
+  const dup = records.find(r => (r.name || '').trim() === f.name && r.date === f.date);
+  if(dup && !confirm('มีการบันทึกของ ' + f.name + ' ในวันที่นี้แล้ว (รหัส ' + dup.code + ') ต้องการบันทึกเพิ่มอีกรายการหรือไม่?')) return;
 
   const answers = collectForm();
   const key = JSON.stringify(answers);
