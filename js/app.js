@@ -12,26 +12,41 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>'
 const fmtDate = iso => { const [y,m,d] = iso.split('-').map(Number); return `${d} ${TH_MONTHS[m-1]} ${y+543}`; };
 
 // เร่งด่วน: SBP ≥180 และ DBP ≥110 ต้องส่งพบแพทย์
-// สงสัยป่วย: ความดัน SBP 140–179 และ DBP 90–109 (ต้องเข้าทั้งสองค่า), น้ำตาลงดอาหาร 8 ชม. ≥126 เข้าติดตาม (BP Home 7 วัน)
+// สงสัยป่วย: ความดัน SBP ≥140 และ DBP ≥90 (เร่งด่วนแยกต่างหาก), น้ำตาลงดอาหาร 8 ชม. ≥126 เข้าติดตาม (BP Home 7 วัน)
 // น้ำตาลไม่ได้งดอาหาร ≥110 ให้เจาะซ้ำพรุ่งนี้โดยงดอาหาร 8 ชม.
 // ผู้ที่เป็นโรคประจำตัวแล้ว (ติ๊กในหน้าคัดกรอง) ไม่ต้องคัดกรองโรคนั้นซ้ำ จึงไม่นับค่าของโรคนั้น
 function sugarRisk(r){ return !(r.answers || {}).fDxDm && r.fbs>=126 && (r.answers || {}).fFasting === 'fast8'; }
 function needsRetest(r){ return !(r.answers || {}).fDxDm && r.fbs>=110 && (r.answers || {}).fFasting !== 'fast8'; }
 // ความดันตามเกณฑ์ลูกค้า (แก้ไขครั้งที่ 1): เร่งด่วนต้องเข้าทั้งสองค่า
-// เร่งด่วน = SBP ≥180 และ DBP ≥110 | สงสัยป่วย = SBP 140–179 และ DBP ≥90 (รวมกรณี DBP ≥110 ตามคำขอลูกค้า) | นอกนั้นยังไม่เข้าเกณฑ์
+// เร่งด่วน = SBP ≥180 และ DBP ≥110 | สงสัยป่วย = SBP ≥140 และ DBP ≥90 (รวมกรณี SBP ≥180 และ DBP 90–109) | นอกนั้นยังไม่เข้าเกณฑ์
 // ผู้ที่เป็นความดันโลหิตสูงอยู่แล้วไม่นับ "สงสัยป่วย" แต่ยังแจ้งเร่งด่วนหากค่าสูงมาก
 function bpLevel(r){
   if(r.sbp>=180 && r.dbp>=110) return 'refer';
-  // ตามคำขอของลูกค้า: SBP 140–179 ที่ DBP ≥110 ก็เข้ากลุ่มสงสัยความดันโลหิตสูงด้วย
-  if(!(r.answers || {}).fDxHtn && r.sbp>=140 && r.sbp<=179 && r.dbp>=90) return 'recheck';
+  if(!(r.answers || {}).fDxHtn && r.sbp>=140 && r.dbp>=90) return 'recheck';
   return 'normal';
 }
 // สถานะกลาง ใช้ร่วมกันทั้งระบบ (การ์ด ตัวกรอง กระดิ่ง อีเมล กล่องผลลัพธ์ รายงาน)
 // เร่งด่วน = SBP ≥180 และ DBP ≥110 | ต้องติดตาม = ความดันสงสัยป่วยตามข้อ bpLevel หรือน้ำตาลเข้าเกณฑ์ (งดอาหาร ≥126, ไม่งดอาหาร ≥110)
-function statusOf(r){
-  const bp = bpLevel(r);
+// ค่าปัจจุบันที่ใช้ประเมินสถานะ: ความดันใช้ค่า BP Home ล่าสุด (ถ้ามี) น้ำตาลใช้ค่าล่าสุดเมื่อบันทึกครบ 2 ครั้งแล้ว ไม่งั้นใช้ค่าตอนคัดกรอง
+function currentOf(r){
+  const bp = latestOf(bpHomeFor(r.id));
+  const sgList = sugarLogsFor(r.id);
+  const sg = sgList.length >= 2 ? latestOf(sgList) : null;
+  const answers = Object.assign({}, r.answers || {});
+  if(sg) answers.fFasting = sg.fasting;
+  return Object.assign({}, r, {
+    sbp: bp ? bp.systolic : r.sbp,
+    dbp: bp ? bp.diastolic : r.dbp,
+    fbs: sg ? sg.fbs : r.fbs,
+    answers
+  });
+}
+// orig = true ใช้ค่าตอนคัดกรอง (ไฟล์ Excel ส่งออกค่าเดิมตั้งแต่วันแรก) | ไม่ส่งมา = ใช้ค่าปัจจุบัน (หน้าจอ)
+function statusOf(r, orig){
+  const c = orig ? r : currentOf(r);
+  const bp = bpLevel(c);
   if(bp === 'refer') return 'refer';
-  if(bp === 'recheck' || sugarRisk(r) || needsRetest(r)) return 'recheck';
+  if(bp === 'recheck' || sugarRisk(c) || needsRetest(c)) return 'recheck';
   return 'normal';
 }
 // กลุ่มทางคลินิก: รายเก่า (มีโรคประจำตัว) ก่อน แล้วจึงแยกผู้สงสัยป่วยตามค่าที่ผิดปกติ
@@ -39,10 +54,11 @@ function statusOf(r){
 const CLINICAL_LABEL = { normal:'ปกติ', htnSuspect:'สงสัยป่วยความดันโลหิตสูง', dmSuspect:'สงสัยป่วยเบาหวาน', bothSuspect:'สงสัยป่วยทั้งสองโรค', oldHtn:'รายเก่าความดันโลหิตสูง', oldDm:'รายเก่าเบาหวาน' };
 // คนหนึ่งคนอาจนับได้มากกว่า 1 กลุ่ม เช่น เป็นเบาหวานอยู่แล้ว (รายเก่าเบาหวาน) และความดันเข้าเกณฑ์ (สงสัยป่วยความดัน)
 // ผู้ที่เป็นความดันทั้งสองโรคนับในกลุ่มความดันโลหิตสูงกลุ่มเดียว
-function clinicalOf(r){
-  const a = r.answers || {};
-  const bpAbnormal = !a.fDxHtn && bpLevel(r) !== 'normal';
-  const sugarAbnormal = sugarRisk(r) || needsRetest(r);
+function clinicalOf(r, orig){
+  const c = orig ? r : currentOf(r);
+  const a = c.answers;
+  const bpAbnormal = !a.fDxHtn && bpLevel(c) !== 'normal';
+  const sugarAbnormal = sugarRisk(c) || needsRetest(c);
   const keys = [];
   if(bpAbnormal && sugarAbnormal) keys.push('bothSuspect');
   else if(bpAbnormal) keys.push('htnSuspect');
@@ -62,9 +78,10 @@ function typeOf(r){
 }
 const BADGE = { normal:['b-ok','ปกติ'], recheck:['b-warn','ต้องติดตาม'], refer:['b-bad','กึ่งวิกฤต'] };
 // ระดับเร่งด่วน: ฉุกเฉิน = SBP ≥180 และ DBP ≥120 (ส่งพบแพทย์ทันที) นอกนั้นเป็นกึ่งวิกฤต (วัดซ้ำก่อนส่งต่อ)
-function badgeOf(r){
-  const st = statusOf(r);
-  if(st === 'refer' && r.dbp >= 120) return ['b-bad','ฉุกเฉิน'];
+function badgeOf(r, orig){
+  const st = statusOf(r, orig);
+  const c = orig ? r : currentOf(r);
+  if(st === 'refer' && c.dbp >= 120) return ['b-bad','ฉุกเฉิน'];
   return BADGE[st];
 }
 
@@ -77,7 +94,7 @@ const ALERT_MAX_RECIPIENTS = 2;
 function isValidEmail(s){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s); }
 
 // สีส้ม = รอติดตามซ้ำ (recheck) สีแดง = รอพบแพทย์ (refer)
-// ผู้ที่ต้องส่งเมล: สถานะไม่ปกติ หรือค่าเฉลี่ย BP Home 7 วันเข้าเกณฑ์ (140–179/90–109 หรือเร่งด่วน)
+// ผู้ที่ต้องส่งเมล: สถานะไม่ปกติ หรือค่าเฉลี่ย BP Home 7 วันเข้าเกณฑ์ (ตัวบน ≥140 และตัวล่าง ≥90 หรือเร่งด่วน)
 function bpHomeQualifies(r){
   const avg = bpHomeAverage(bpHomeFor(r.id), r.answers);
   return !!avg && bpLevel({ sbp: avg.sys, dbp: avg.dia }) !== 'normal';
@@ -226,6 +243,8 @@ function openBp(recordId){
   if(!r) return;
   $('bpCard').dataset.record = recordId;
   bpEditing = null;
+  sgEditing = null;
+  $('sgSave').textContent = 'บันทึกค่าน้ำตาล';
   $('bpName').textContent = displayName(r) || r.code;
   $('bpDate').value = todayIso();
   $('bpTime').value = new Date().toTimeString().slice(0, 5);
@@ -395,6 +414,19 @@ function sugarFlag(x){
   if(x.fasting === 'fast8') return x.fbs >= 126;
   return x.fbs >= 110;
 }
+let sgEditing = null;
+function startEditSg(i){
+  const list = sugarLogsFor($('bpCard').dataset.record).slice().reverse();
+  const x = list[i];
+  if(!x) return;
+  sgEditing = x;
+  $('sgDate').value = x.measured_at;
+  $('sgTime').value = x.measured_time ? x.measured_time.slice(0, 5) : '';
+  $('sgFasting').value = x.fasting;
+  $('sgValue').value = x.fbs;
+  $('sgSave').textContent = 'บันทึกการแก้ไข';
+  $('sgValue').focus();
+}
 async function saveSugar(){
   if(!canView('fu_record')){ toast('บันทึกได้เฉพาะ อสม.'); return; }
   const id = $('bpCard').dataset.record;
@@ -405,6 +437,19 @@ async function saveSugar(){
   if(!measured_at){ toast('กรุณาเลือกวันที่'); return; }
   if(!fbs){ toast('กรุณากรอกค่าน้ำตาล'); return; }
   const row = { record_id: id, measured_at, measured_time, fasting, fbs };
+  if(sgEditing){
+    const old = sgEditing;
+    const { error } = await sb.from('sugar_logs').update({ measured_at, measured_time, fasting, fbs })
+      .match({ record_id: id, measured_at: old.measured_at, measured_time: old.measured_time, fasting: old.fasting, fbs: old.fbs });
+    if(error){ toast('แก้ไขไม่สำเร็จ: ' + error.message); return; }
+    Object.assign(old, row);
+    sgEditing = null;
+    $('sgSave').textContent = 'บันทึกค่าน้ำตาล';
+    $('sgValue').value = '';
+    renderSugar();
+    toast('แก้ไขค่าน้ำตาลแล้ว');
+    return;
+  }
   const { error } = await sb.from('sugar_logs').insert(row);
   if(error){ toast('บันทึกไม่สำเร็จ: ' + error.message); return; }
   sugarLogs.push(row);
@@ -422,7 +467,8 @@ function renderSugar(){
       <td>${FAST_LABEL[x.fasting] || '-'}</td>
       <td>${x.fbs}</td>
       <td>${sugarFlag(x) ? '<span class="badge b-bad">สูง</span>' : '<span class="badge b-ok">ปกติ</span>'}</td>
-    </tr>`).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:12px">ยังไม่มีการบันทึกน้ำตาล</td></tr>';
+      <td><button class="btn-ghost" data-edit-sg="${list.indexOf(x)}">แก้ไข</button></td>
+    </tr>`).join('') :'<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:12px">ยังไม่มีการบันทึกน้ำตาล</td></tr>';
   $('sgSave').hidden = !canView('fu_record');
 }
 // ---- บันทึกประจำวัน 7 วัน (อยู่ในการ์ด BP Home): อาการประจำวัน ----
@@ -638,7 +684,7 @@ function renderAnswers(r){
 }
 function nextRecordCode(){
   const nums = records.map(r => parseInt(String(r.code || '').replace(/\D/g, ''), 10) || 0);
-  return 'REC-' + pad(Math.max(0, ...nums) + 1);
+  return 'REC-' + (Math.max(0, ...nums) + 1);
 }
 function renderPatient(){
   const r = records.find(x => x.id === currentPatientId);
@@ -810,7 +856,8 @@ async function saveFollow(){
 }
 
 // ส่งออกทะเบียนพร้อมคำตอบแบบสอบถามทั้งชุด (คอลัมน์ตามชื่อช่องในฟอร์ม)
-function exportRecordsCsv(list){
+// ไฟล์ Excel ทั้งหน้าทะเบียนและหน้ารายงานใช้ฟังก์ชันนี้ร่วมกัน และใช้ค่าตอนคัดกรอง (orig = true)
+function exportRecordsCsv(list, fileLabel){
   if(!list.length){ toast('ไม่มีข้อมูลให้ส่งออก'); return; }
   const keys = [...new Set(list.flatMap(r => Object.keys(r.answers || {})))];
   const extra = ['ผลการประเมินทางคลินิก','การงดน้ำ อาหาร','เวลาทานอาหารล่าสุด'];
@@ -826,14 +873,14 @@ function exportRecordsCsv(list){
   };
   const rows = list.map(r => {
     const a = r.answers || {};
-    return [fmtDate(r.date), r.code, displayName(r), r.age || '', r.sbp, r.dbp, r.fbs || '', badgeOf(r)[1],
-      clinicalOf(r).label, FAST_LABEL[a.fFasting] || '', MEAL_LABEL[a.fMeal] || '', ...keys.map(k => show(k, a[k]))];
+    return [fmtDate(r.date), r.code, displayName(r), r.age || '', r.sbp, r.dbp, r.fbs || '', badgeOf(r, true)[1],
+      clinicalOf(r, true).label, FAST_LABEL[a.fFasting] || '', MEAL_LABEL[a.fMeal] || '', ...keys.map(k => show(k, a[k]))];
   });
   const csv = '\uFEFF' + [head, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n');
   const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'ทะเบียนคัดกรอง_' + todayIso() + '.csv';
+  a.download = (fileLabel || 'ทะเบียนคัดกรอง') + '_' + todayIso() + '.csv';
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -913,7 +960,10 @@ function renderDashboard(){
   $('kpiSuspect').textContent = counts.recheck;
   $('kpiTracking').textContent = risk.filter(r => followStatus(r) === 'pending').length;
   $('kpiSeven').textContent = seven.length;
-  $('kpiUrgent').textContent = new Set([...records.filter(r => statusOf(r) === 'refer' && !isReferred(r)), ...overdue].map(r => r.id)).size;
+  // กึ่งวิกฤต = refer แต่ DBP <120 | ฉุกเฉิน = refer และ DBP ≥120 (ตรงกับป้าย badgeOf)
+  const referNotSent = records.filter(r => statusOf(r) === 'refer' && !isReferred(r));
+  $('kpiRefer').textContent = referNotSent.filter(r => r.dbp < 120).length;
+  $('kpiEmergency').textContent = referNotSent.filter(r => r.dbp >= 120).length;
   const pct = n => total ? Math.round(n / total * 100) : 0;
   // สัดส่วนทางคลินิก (คนที่เป็นรายเก่าทั้งความดันและเบาหวาน นับในกลุ่มความดันโลหิตสูงกลุ่มเดียว)
   const grp = { normal:0, htnSuspect:0, dmSuspect:0, bothSuspect:0, oldHtn:0, oldDm:0 };
@@ -1233,28 +1283,45 @@ function csvCell(v){
   return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
 }
 
-function exportCsv(){
-  const list = filteredRecords();
+// ส่งออกข้อมูลทุกรายการที่บันทึกของคนในช่วงเลขทะเบียนที่กรอง (ไม่ใส่เลขทะเบียน = ทุกคน) ไม่กรองตามวันที่และสถานะ
+// หนึ่งแถวต่อหนึ่งรายการ: การคัดกรอง / BP Home / น้ำตาล / อาการประจำวัน / การติดตาม
+function exportAllCsv(){
+  const codeFrom = $('rpCodeFrom').value.trim(), codeTo = $('rpCodeTo').value.trim();
+  const list = records.filter(r => codeInRange(r.code, codeFrom, codeTo));
   if(!list.length){ toast('ไม่มีข้อมูลให้ส่งออก'); return; }
-  const head = ['วันที่','รหัส','ชื่อ-สกุล','อายุ','ความดันตัวบน','ความดันตัวล่าง','น้ำตาลในเลือด','ผลคัดกรอง','ผลการประเมินทางคลินิก','การงดน้ำ อาหาร','เวลาทานอาหารล่าสุด'];
-  const rows = list.map(r => {
-    const a = r.answers || {};
-    return [fmtDate(r.date), r.code, displayName(r), r.age || '', r.sbp, r.dbp, r.fbs || '', badgeOf(r)[1],
-      clinicalOf(r).label, FAST_LABEL[a.fFasting] || '', MEAL_LABEL[a.fMeal] || ''];
+  const head = ['รหัส','ชื่อ-สกุล','อายุ','ประเภทข้อมูล','วันที่','เวลา','ค่าที่บันทึก','หมายเหตุ'];
+  const rows = [];
+  list.forEach(r => {
+    const who = [r.code, displayName(r), r.age || ''];
+    rows.push([...who, 'การคัดกรอง', fmtDate(r.date), '',
+      `ความดัน ${r.sbp}/${r.dbp} · น้ำตาล ${r.fbs || '-'}`,
+      `${badgeOf(r, true)[1]} · ${clinicalOf(r, true).label}`]);
+    bpHomeFor(r.id).slice().sort((a, b) => (a.measured_at + (a.measured_time || '')).localeCompare(b.measured_at + (b.measured_time || ''))).forEach(x => {
+      rows.push([...who, 'BP Home วันที่ ' + x.day_number, fmtDate(x.measured_at), x.measured_time ? x.measured_time.slice(0, 5) : '',
+        `${x.systolic}/${x.diastolic} mmHg`, '']);
+    });
+    sugarLogsFor(r.id).forEach(x => {
+      rows.push([...who, 'น้ำตาลปลายนิ้ว', fmtDate(x.measured_at), x.measured_time ? x.measured_time.slice(0, 5) : '',
+        `${x.fbs} mg/dL`, FAST_LABEL[x.fasting] || '']);
+    });
+    dailyLogsFor(r.id).forEach(x => {
+      rows.push([...who, 'อาการประจำวัน วันที่ ' + x.day_number, fmtDate(x.measured_at), '', '', x.symptom || '']);
+    });
+    followUps.filter(f => f.record_id === r.id).forEach(f => {
+      rows.push([...who, 'การติดตาม', fmtDate(f.visited_at), '', f.result || '', f.note || '']);
+    });
   });
-  // \uFEFF = BOM ทำให้ Excel อ่านภาษาไทยถูกต้อง
-  const csv = '\uFEFF' + [head, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n');
+  const csv = '﻿' + [head, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n');
   const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'รายงานคัดกรอง_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.download = 'ข้อมูลทั้งหมด_' + todayIso() + '.csv';
   document.body.appendChild(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  toast('ส่งออกไฟล์ CSV แล้ว เปิดด้วย Excel ได้เลย');
+  toast('ส่งออกข้อมูลทั้งหมดแล้ว');
 }
-
 
 // ---- เข้าสู่ระบบ (ชื่อผู้ใช้และรหัสผ่าน) ----
 const PAGES = [
@@ -1584,7 +1651,7 @@ toggleQuitYears();
 ['rFrom','rTo','rStatus'].forEach(id => $(id).addEventListener('change', renderReport));
 ['rpCodeFrom','rpCodeTo'].forEach(id => $(id).addEventListener('input', renderReport));
 $('rTo').value = new Date().toISOString().slice(0,10);
-$('btnExport').addEventListener('click', exportCsv);
+$('btnExport').addEventListener('click', exportAllCsv);
 $('btnPrint').addEventListener('click', () => window.print());
 $('fWeight').addEventListener('input', updateBmi);
 $('fHeight').addEventListener('input', updateBmi);
@@ -1628,6 +1695,10 @@ $('bpRows').addEventListener('click', e => {
 });
 $('dSave').addEventListener('click', saveDaily);
 $('sgSave').addEventListener('click', saveSugar);
+$('sgRows').addEventListener('click', e => {
+  const i = e.target.dataset.editSg;
+  if(i !== undefined) startEditSg(Number(i));
+});
 $('bpClose').addEventListener('click', closeBp);
 loadAlertForm();
 retryPendingAlerts();

@@ -84,8 +84,8 @@
           <div class="kpi"><div class="label">⚠ ต้องติดตาม</div><div class="value c-orange" id="kpiSuspect">0</div><div class="sub">ราย</div></div>
           <div class="kpi"><div class="label">◷ กำลังติดตาม</div><div class="value c-blue" id="kpiTracking">0</div><div class="sub">ราย · รอการติดตาม</div></div>
           <div class="kpi"><div class="label">✓ ติดตามครบ 7 วัน</div><div class="value c-teal" id="kpiSeven">0</div><div class="sub">ราย</div></div>
-          <div class="kpi"><div class="label">‼ กึ่งวิกฤต/ฉุกเฉิน / เกินกำหนดติดตาม</div><div class="value c-red" id="kpiUrgent">0</div><div class="sub">ราย</div></div>
-        </div>
+          <div class="kpi"><div class="label">‼ กึ่งวิกฤต</div><div class="value c-red" id="kpiRefer">0</div><div class="sub">ราย · ยังไม่ส่งต่อ</div></div>
+          <div class="kpi"><div class="label">🚨 ฉุกเฉิน</div><div class="value c-red" id="kpiEmergency">0</div><div class="sub">ราย · ยังไม่ส่งต่อ</div></div>        </div>
 
         <div class="card card-gap">
           <h3>สัดส่วนการประเมินทางคลินิก (OR Logic)</h3>
@@ -531,7 +531,7 @@
             </div>
             <button class="btn btn-primary" id="sgSave">บันทึกค่าน้ำตาล</button>
             <div class="table-wrap" style="margin-top:12px"><table>
-              <thead><tr><th>วันที่</th><th>เวลา</th><th>งด/ไม่งด</th><th>น้ำตาล</th><th>ผล</th></tr></thead>
+              <thead><tr><th>วันที่</th><th>เวลา</th><th>งด/ไม่งด</th><th>น้ำตาล</th><th>ผล</th><th>แก้ไข</th></tr></thead>
               <tbody id="sgRows"></tbody>
             </table></div>
           </div>
