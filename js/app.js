@@ -561,9 +561,24 @@ const MEAL_LABEL = { unknown: 'จำไม่ได้', within2: 'ภายใ
 // แสดงคำตอบทั้งหมดจากการคัดกรองครั้งแรก เป็นอ่านอย่างเดียว ใช้ข้อความหัวข้อจากฟอร์มคัดกรอง
 function renderAnswers(r){
   const a = r.answers || {};
-  const rows = Object.keys(a).map(k => {
-    const label = document.querySelector(`label[for="${k}"]`)?.textContent.trim() || k;
+  // วัน เดือน ปี เวลา เป็นส่วนของวันที่คัดกรองที่แสดงอยู่แล้ว และ fNotes เป็นช่องที่เอาออกจากฟอร์มแล้ว จึงไม่แสดง
+  // คำนำหน้าแสดงรวมกับชื่อในแถวชื่อ-สกุล จึงไม่แสดงแยก
+  const skip = ['fDay', 'fMonth', 'fYear', 'fHour', 'fMinute', 'fNotes', 'pPrefix'];
+  // เรียงตามลำดับช่องในฟอร์มคัดกรอง ช่องที่หาไม่พบในฟอร์มไปไว้ท้ายสุด
+  const formOrder = (x, y) => {
+    const ex = document.getElementById(x), ey = document.getElementById(y);
+    if(!ex || !ey) return ex ? -1 : ey ? 1 : 0;
+    return ex.compareDocumentPosition(ey) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+  };
+  const rows = Object.keys(a).sort(formOrder).filter(k => !skip.includes(k)).map(k => {
+    // หาหัวข้อจาก label ที่ผูกกับช่อง หรือ label ที่ครอบช่องนั้น หรือ aria-label
+    const el = document.getElementById(k);
+    const label = document.querySelector(`label[for="${k}"]`)?.textContent.trim()
+      || el?.closest('label')?.textContent.trim()
+      || el?.getAttribute('aria-label')
+      || k;
     let v = a[k];
+    if(k === 'pName') v = displayName({ name: v, answers: a });
     if(v === true) v = 'ใช่';
     else if(v === false) v = 'ไม่ใช่';
     else if(Array.isArray(v)) v = v.join(' / ');
