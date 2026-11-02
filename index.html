@@ -578,6 +578,24 @@
           </div>
           <button class="btn btn-primary" id="pdDateSave">บันทึกวันที่</button>
         </div>
+        <div class="card card-gap" id="pdEditCard" hidden>
+          <h3>แก้ไขข้อมูลคัดกรอง (เฉพาะผู้ดูแลระบบ)</h3>
+          <p class="note">ใช้เมื่อกรอกข้อมูลผิด ค่าที่แก้จะแสดงในทะเบียนและแดชบอร์ดทันที</p>
+          <div class="grid2">
+            <div class="field"><label for="psEName">ชื่อ-สกุล</label><input id="psEName" type="text"></div>
+            <div class="field"><label for="psEAge">อายุ (ปี)</label><input id="psEAge" type="number" inputmode="numeric"></div>
+            <div class="field"><label for="psESbp">ความดันตัวบน</label><input id="psESbp" type="number" inputmode="numeric"></div>
+            <div class="field"><label for="psEDbp">ความดันตัวล่าง</label><input id="psEDbp" type="number" inputmode="numeric"></div>
+            <div class="field"><label for="psESugar">น้ำตาลในเลือด (mg/dL)</label><input id="psESugar" type="number" inputmode="numeric"></div>
+            <div class="field"><label for="psEFasting">การงดน้ำ อาหาร</label>
+              <select id="psEFasting">
+                <option value="fast8">งดครบ 8 ชั่วโมง</option>
+                <option value="notfast">ไม่ได้งดครบ 8 ชั่วโมง</option>
+                <option value="unsure">ไม่แน่ใจ</option>
+              </select></div>
+          </div>
+          <button class="btn btn-primary" id="psEditSave">บันทึกการแก้ไข</button>
+        </div>
         <div class="card card-gap" id="pdAnswers">
           <h3>ข้อมูลที่กรอกตอนคัดกรองครั้งแรก</h3>
           <p class="note">แสดงอย่างเดียว ไม่สามารถแก้ไขได้จากหน้านี้</p>
