@@ -1381,9 +1381,41 @@ function csvCell(v){
 
 // ส่งออกข้อมูลทุกรายการที่บันทึกของคนในช่วงเลขทะเบียนที่กรอง (ไม่ใส่เลขทะเบียน = ทุกคน) ไม่กรองตามวันที่และสถานะ
 // หนึ่งแถวต่อหนึ่งรายการ: การคัดกรอง / BP Home / น้ำตาล / อาการประจำวัน / การติดตาม
+// หน้ารายงาน: ไฟล์ติดตาม 7 วันของทุกคนในช่วงเลขทะเบียนที่กรอง (หนึ่งแถวต่อคนต่อวัน 1–7)
 function exportAllCsv(){
   const codeFrom = $('rpCodeFrom').value.trim(), codeTo = $('rpCodeTo').value.trim();
-  exportRecordsCsv(records.filter(r => codeInRange(r.code, codeFrom, codeTo)), 'ข้อมูลทั้งหมด');
+  const list = records.filter(r => codeInRange(r.code, codeFrom, codeTo));
+  if(!list.length){ toast('ไม่มีข้อมูลให้ส่งออก'); return; }
+  const head = ['รหัส','ชื่อ-สกุล','อายุ','วันที่คัดกรอง','ติดตามวันที่','วันที่','การวัดครั้งที่ 1','การวัดครั้งที่ 2','การวัดครั้งที่ 3','การวัดครั้งที่ 4','ค่าเฉลี่ย 7 วัน (ตัวบน/ตัวล่าง)','น้ำตาล (mg/dL)','อาการ','ผลการติดตามล่าสุด','วันที่ติดตามล่าสุด'];
+  const rows = [];
+  list.forEach(r => {
+    const bp = bpHomeFor(r.id);
+    const avg = bpHomeAverage(bp, r.answers);
+    const avgText = avg ? `${avg.sys}/${avg.dia} (${avg.days} วัน)` : '-';
+    const fu = latestFollowUp(r.id);
+    const fuText = fu ? fu.result || '-' : '-';
+    const fuDate = fu ? fmtDate(fu.visited_at) : '-';
+    const sgAll = sugarLogsFor(r.id);
+    const dl = dailyLogsFor(r.id);
+    [1,2,3,4,5,6,7].forEach(d => {
+      const date = addDays(r.date, d);
+      const reads = bp.filter(x => x.day_number === d).sort((x, y) => (x.measured_time || '').localeCompare(y.measured_time || ''));
+      const cols = [0,1,2,3].map(k => reads[k] ? `${reads[k].systolic}/${reads[k].diastolic}${reads[k].measured_time ? ' ' + reads[k].measured_time.slice(0,5) : ''}` : '');
+      const sg = sgAll.filter(x => x.measured_at === date).map(x => x.fbs + (x.fasting === 'fast8' ? ' (งดอาหาร)' : '')).join(' / ');
+      const sym = (dl.find(x => x.day_number === d) || {}).symptom || '';
+      rows.push([r.code, displayName(r), r.age || '', fmtDate(r.date), d, fmtDate(date), ...cols, avgText, sg, sym, fuText, fuDate]);
+    });
+  });
+  const csv = '﻿' + [head, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n');
+  const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'ติดตาม7วัน_' + todayIso() + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  toast('ส่งออกไฟล์ติดตาม 7 วันแล้ว');
 }
 
 // ---- เข้าสู่ระบบ (ชื่อผู้ใช้และรหัสผ่าน) ----
