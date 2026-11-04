@@ -886,6 +886,7 @@ function exportLabel(k){
   return t || EXPORT_LABEL_FALLBACK[k] || k;
 }
 // ไฟล์ Excel ทั้งหน้าทะเบียนและหน้ารายงานใช้ฟังก์ชันนี้ร่วมกัน และใช้ค่าตอนคัดกรอง (orig = true)
+// หน้าทะเบียน: หนึ่งคนหนึ่งแถว ใช้ข้อมูลตอนคัดกรองครั้งแรก ข้อมูลทั่วไปรวมเป็นฟิลด์เดียว
 function exportRecordsCsv(list, fileLabel){
   if(!list.length){ toast('ไม่มีข้อมูลให้ส่งออก'); return; }
   const keys = [...new Set(list.flatMap(r => Object.keys(r.answers || {})))].filter(k => !EXPORT_SKIP.includes(k));
@@ -897,27 +898,15 @@ function exportRecordsCsv(list, fileLabel){
     if(k === 'fMeal') return MEAL_LABEL[v] || v || '';
     return v ?? '';
   };
-  const hm = t => t ? String(t).slice(0, 5) : '';
-  const head = ['รหัส','ชื่อ-สกุล','อายุ','โรคประจำตัว', ...keys.map(exportLabel), 'กลุ่มเป้าหมาย','ประเภท','วันที่','เวลา','ค่า','หมายเหตุ'];
-  const rows = [];
-  list.forEach(r => {
+  const head = ['รหัส','ชื่อ-สกุล','อายุ','โรคประจำตัว','ข้อมูลทั่วไป','กลุ่มเป้าหมาย','ประเภท','วันที่','เวลา','ค่า','หมายเหตุ'];
+  const rows = list.map(r => {
     const a = r.answers || {};
     const dis = [a.fDxHtn ? 'ความดันโลหิตสูง' : '', a.fDxDm ? 'เบาหวาน' : ''].filter(Boolean).join(' / ') || '-';
-    const who = [r.code, displayName(r), r.age || '', dis, ...keys.map(k => show(k, a[k])), clinicalOf(r, true).label];
-    const screenTime = a.fHour && a.fMinute ? a.fHour + ':' + a.fMinute : '';
-    rows.push([...who, 'การคัดกรอง', fmtDate(r.date), screenTime, `${r.sbp}/${r.dbp} mmHg · น้ำตาล ${r.fbs || '-'}`, badgeOf(r, true)[1]]);
-    bpHomeFor(r.id).slice().sort((x, y) => (x.measured_at + (x.measured_time || '')).localeCompare(y.measured_at + (y.measured_time || ''))).forEach(x => {
-      rows.push([...who, 'BP Home วันที่ ' + x.day_number, fmtDate(x.measured_at), hm(x.measured_time), `${x.systolic}/${x.diastolic} mmHg`, '']);
-    });
-    sugarLogsFor(r.id).forEach(x => {
-      rows.push([...who, 'น้ำตาลปลายนิ้ว', fmtDate(x.measured_at), hm(x.measured_time), `${x.fbs} mg/dL`, FAST_LABEL[x.fasting] || '']);
-    });
-    dailyLogsFor(r.id).forEach(x => {
-      rows.push([...who, 'อาการประจำวัน วันที่ ' + x.day_number, fmtDate(x.measured_at), '', x.symptom || '', '']);
-    });
-    followUps.filter(f => f.record_id === r.id).forEach(f => {
-      rows.push([...who, 'การติดตาม', fmtDate(f.visited_at), '', f.result || '', f.note || '']);
-    });
+    const general = keys.filter(k => a[k] !== undefined && a[k] !== '' && a[k] !== null)
+      .map(k => exportLabel(k) + ': ' + show(k, a[k])).join(' · ');
+    const time = a.fHour && a.fMinute ? a.fHour + ':' + a.fMinute : '';
+    return [r.code, displayName(r), r.age || '', dis, general, clinicalOf(r, true).label,
+      'การคัดกรอง', fmtDate(r.date), time, `${r.sbp}/${r.dbp} mmHg · น้ำตาล ${r.fbs || '-'}`, badgeOf(r, true)[1]];
   });
   const csv = '﻿' + [head, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n');
   const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
@@ -928,7 +917,7 @@ function exportRecordsCsv(list, fileLabel){
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  toast('ส่งออกไฟล์ Excel แล้ว');
+  toast('ส่งออกไฟล์ทะเบียนแล้ว');
 }
 
 // โหลดข้อมูลจาก Supabase หลังเข้าสู่ระบบ
