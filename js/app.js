@@ -549,6 +549,13 @@ async function saveScreenDate(){
 }
 $('pdDateSave').addEventListener('click', saveScreenDate);
 
+// ปุ่มแก้ไขในทะเบียน: เปิดฟอร์มคัดกรองแบบเดียวกันพร้อมข้อมูลเดิม
+$('regRows').addEventListener('click', e => {
+  const b = e.target.closest('[data-edit]');
+  if(b) startEditScreening(b.dataset.edit);
+});
+$('editCancel').addEventListener('click', cancelEditScreening);
+
 // ลบผลคัดกรองที่กรอกผิด (ผู้ดูแลระบบเท่านั้น) ตารางลูกจะถูกลบตามด้วย on delete cascade
 async function deletePatient(){
   if(!canView('admin')){ toast('เฉพาะผู้ดูแลระบบลบข้อมูลได้'); return; }
@@ -812,7 +819,7 @@ function renderRegister(){
       <td>${currentFbs(r)}</td>
       <td>${esc(clinicalOf(r).label)}</td>
       <td><span class="badge ${badgeOf(r)[0]}">${badgeOf(r)[1]}</span></td>
-      <td><button class="btn-ghost" data-detail="${esc(r.id)}">ดูรายละเอียด</button></td>
+      <td><button class="btn-ghost" data-detail="${esc(r.id)}">ดูรายละเอียด</button>${canView('admin') ? ` <button class="btn-ghost" data-edit="${esc(r.id)}">แก้ไข</button>` : ''}</td>
     </tr>`;
   }).join('') : '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:20px">ไม่พบข้อมูล</td></tr>';
 }
@@ -869,7 +876,7 @@ async function saveFollow(){
 
 // ส่งออกทะเบียนพร้อมคำตอบแบบสอบถามทั้งชุด (คอลัมน์ตามชื่อช่องในฟอร์ม)
 // คอลัมน์คำตอบในไฟล์ Excel ใช้หัวข้อภาษาไทย (ไม่ใช้ชื่อฟิลด์) และข้ามช่องที่ซ้ำกับคอลัมน์หลักแล้ว
-const EXPORT_SKIP = ['pName','pPrefix','fNotes','fSbp','fDbp','fSugar'];
+const EXPORT_SKIP = ['pName','pPrefix','fNotes','fSbp','fDbp','fSugar','fDay','fMonth','fYear','fHour','fMinute','fDxHtn','fDxDm'];
 const EXPORT_LABEL_FALLBACK = { fDay:'วันที่คัดกรอง (วัน)', fMonth:'วันที่คัดกรอง (เดือน)', fYear:'วันที่คัดกรอง (ปี)', fHour:'เวลาคัดกรอง (ชั่วโมง)', fMinute:'เวลาคัดกรอง (นาที)', fBmi:'ดัชนีมวลกาย (BMI)', fWeight:'น้ำหนัก (กก.)', fHeight:'ส่วนสูง (ซม.)' };
 function exportLabel(k){
   const el = document.getElementById(k);
@@ -882,9 +889,6 @@ function exportLabel(k){
 function exportRecordsCsv(list, fileLabel){
   if(!list.length){ toast('ไม่มีข้อมูลให้ส่งออก'); return; }
   const keys = [...new Set(list.flatMap(r => Object.keys(r.answers || {})))].filter(k => !EXPORT_SKIP.includes(k));
-  const extra = ['ผลการประเมินทางคลินิก','การงดน้ำ อาหาร','เวลาทานอาหารล่าสุด'];
-  const head = ['วันที่','รหัส','ชื่อ-สกุล','อายุ','ความดันตัวบน','ความดันตัวล่าง','น้ำตาลในเลือด','ผลคัดกรอง', ...extra, ...keys.map(exportLabel)];
-  // ค่าที่เป็นข้อความตัวเลือกแปลงเป็นภาษาไทย และค่าจริง/เท็จเป็น ใช่/ไม่ใช่ ให้อ่านใน Excel ได้
   const show = (k, v) => {
     if(v === true) return 'ใช่';
     if(v === false) return 'ไม่ใช่';
@@ -893,12 +897,29 @@ function exportRecordsCsv(list, fileLabel){
     if(k === 'fMeal') return MEAL_LABEL[v] || v || '';
     return v ?? '';
   };
-  const rows = list.map(r => {
+  const hm = t => t ? String(t).slice(0, 5) : '';
+  const head = ['รหัส','ชื่อ-สกุล','อายุ','โรคประจำตัว', ...keys.map(exportLabel), 'กลุ่มเป้าหมาย','ประเภท','วันที่','เวลา','ค่า','หมายเหตุ'];
+  const rows = [];
+  list.forEach(r => {
     const a = r.answers || {};
-    return [fmtDate(r.date), r.code, displayName(r), r.age || '', r.sbp, r.dbp, r.fbs || '', badgeOf(r, true)[1],
-      clinicalOf(r, true).label, FAST_LABEL[a.fFasting] || '', MEAL_LABEL[a.fMeal] || '', ...keys.map(k => show(k, a[k]))];
+    const dis = [a.fDxHtn ? 'ความดันโลหิตสูง' : '', a.fDxDm ? 'เบาหวาน' : ''].filter(Boolean).join(' / ') || '-';
+    const who = [r.code, displayName(r), r.age || '', dis, ...keys.map(k => show(k, a[k])), clinicalOf(r, true).label];
+    const screenTime = a.fHour && a.fMinute ? a.fHour + ':' + a.fMinute : '';
+    rows.push([...who, 'การคัดกรอง', fmtDate(r.date), screenTime, `${r.sbp}/${r.dbp} mmHg · น้ำตาล ${r.fbs || '-'}`, badgeOf(r, true)[1]]);
+    bpHomeFor(r.id).slice().sort((x, y) => (x.measured_at + (x.measured_time || '')).localeCompare(y.measured_at + (y.measured_time || ''))).forEach(x => {
+      rows.push([...who, 'BP Home วันที่ ' + x.day_number, fmtDate(x.measured_at), hm(x.measured_time), `${x.systolic}/${x.diastolic} mmHg`, '']);
+    });
+    sugarLogsFor(r.id).forEach(x => {
+      rows.push([...who, 'น้ำตาลปลายนิ้ว', fmtDate(x.measured_at), hm(x.measured_time), `${x.fbs} mg/dL`, FAST_LABEL[x.fasting] || '']);
+    });
+    dailyLogsFor(r.id).forEach(x => {
+      rows.push([...who, 'อาการประจำวัน วันที่ ' + x.day_number, fmtDate(x.measured_at), '', x.symptom || '', '']);
+    });
+    followUps.filter(f => f.record_id === r.id).forEach(f => {
+      rows.push([...who, 'การติดตาม', fmtDate(f.visited_at), '', f.result || '', f.note || '']);
+    });
   });
-  const csv = '\uFEFF' + [head, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n');
+  const csv = '﻿' + [head, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n');
   const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -907,7 +928,7 @@ function exportRecordsCsv(list, fileLabel){
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  toast('ส่งออกไฟล์ CSV แล้ว');
+  toast('ส่งออกไฟล์ Excel แล้ว');
 }
 
 // โหลดข้อมูลจาก Supabase หลังเข้าสู่ระบบ
@@ -1131,11 +1152,61 @@ function setEvalEnabled(on){ $('btnEval').disabled = !on; }
   $('btnClear').style.display = '';
 }));
 
+// แก้ไขข้อมูลคัดกรองด้วยฟอร์มเดียวกับการคัดกรอง (ผู้ดูแลระบบเท่านั้น)
+let editingRecordId = null;
+function startEditScreening(id){
+  if(!canView('admin')){ toast('เฉพาะผู้ดูแลระบบแก้ไขได้'); return; }
+  const r = records.find(x => x.id === id);
+  if(!r) return;
+  setView('form');
+  clearFields();
+  Object.entries(r.answers || {}).forEach(([k, v]) => {
+    const el = $(k);
+    if(!el) return;
+    if(el.type === 'checkbox') el.checked = !!v; else el.value = v ?? '';
+  });
+  const d = String(r.date).split('-').map(Number);
+  $('fYear').value = d[0] + 543;
+  $('fMonth').value = d[1] - 1;
+  $('fDay').value = d[2];
+  $('pName').value = r.name || '';
+  $('pAge').value = r.age || '';
+  $('fSbp').value = r.sbp ?? '';
+  $('fDbp').value = r.dbp ?? '';
+  $('fSugar').value = r.fbs || '';
+  editingRecordId = id;
+  $('editBannerText').textContent = 'กำลังแก้ไขข้อมูลของ ' + (displayName(r) || '-') + ' (รหัส ' + r.code + ')';
+  $('editBanner').hidden = false;
+  $('btnEval').textContent = 'บันทึกการแก้ไข';
+  $('btnClear').style.display = 'none';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function cancelEditScreening(){
+  editingRecordId = null;
+  $('editBanner').hidden = true;
+  $('btnEval').textContent = 'ประเมินผลคัดกรองเบื้องต้น';
+  $('btnClear').style.display = '';
+  clearFields();
+}
 async function evaluate(){
   if(evalBusy) return;
   const f = readForm();
   if(!f.name){ toast('กรุณากรอกชื่อ-นามสกุล'); return; }
   if(!f.sbp || !f.dbp){ toast('กรุณากรอกค่าความดันโลหิต'); return; }
+  if(editingRecordId){
+    const rec0 = records.find(x => x.id === editingRecordId);
+    const rowE = { name: f.name, age: parseInt(f.age, 10) || null, screen_date: f.date, sbp: Math.round(f.sbp), dbp: Math.round(f.dbp), fbs: Math.round(f.fbs) || null, answers: collectForm() };
+    const { error: errE } = await sb.from('screening_records').update(rowE).eq('id', editingRecordId);
+    if(errE){ toast('แก้ไขไม่สำเร็จ: ' + errE.message); return; }
+    if(rec0) Object.assign(rec0, { name: rowE.name, age: rowE.age, date: rowE.screen_date, sbp: rowE.sbp, dbp: rowE.dbp, fbs: rowE.fbs, answers: rowE.answers });
+    cancelEditScreening();
+    renderDashboard();
+    renderRegister();
+    renderFollowUp();
+    if(typeof renderReport === 'function') renderReport();
+    toast('แก้ไขข้อมูลคัดกรองแล้ว');
+    return;
+  }
   // เตือนก่อนบันทึกซ้ำ: ชื่อเดียวกันและวันที่คัดกรองเดียวกันที่มีอยู่แล้ว
   const dup = records.find(r => (r.name || '').trim() === f.name && r.date === f.date);
   if(dup && !confirm('มีการบันทึกของ ' + f.name + ' ในวันที่นี้แล้ว (รหัส ' + dup.code + ') ต้องการบันทึกเพิ่มอีกรายการหรือไม่?')) return;
@@ -1312,40 +1383,7 @@ function csvCell(v){
 // หนึ่งแถวต่อหนึ่งรายการ: การคัดกรอง / BP Home / น้ำตาล / อาการประจำวัน / การติดตาม
 function exportAllCsv(){
   const codeFrom = $('rpCodeFrom').value.trim(), codeTo = $('rpCodeTo').value.trim();
-  const list = records.filter(r => codeInRange(r.code, codeFrom, codeTo));
-  if(!list.length){ toast('ไม่มีข้อมูลให้ส่งออก'); return; }
-  const head = ['รหัส','ชื่อ-สกุล','อายุ','ประเภทข้อมูล','วันที่','เวลา','ค่าที่บันทึก','หมายเหตุ'];
-  const rows = [];
-  list.forEach(r => {
-    const who = [r.code, displayName(r), r.age || ''];
-    rows.push([...who, 'การคัดกรอง', fmtDate(r.date), '',
-      `ความดัน ${r.sbp}/${r.dbp} · น้ำตาล ${r.fbs || '-'}`,
-      `${badgeOf(r, true)[1]} · ${clinicalOf(r, true).label}`]);
-    bpHomeFor(r.id).slice().sort((a, b) => (a.measured_at + (a.measured_time || '')).localeCompare(b.measured_at + (b.measured_time || ''))).forEach(x => {
-      rows.push([...who, 'BP Home วันที่ ' + x.day_number, fmtDate(x.measured_at), x.measured_time ? x.measured_time.slice(0, 5) : '',
-        `${x.systolic}/${x.diastolic} mmHg`, '']);
-    });
-    sugarLogsFor(r.id).forEach(x => {
-      rows.push([...who, 'น้ำตาลปลายนิ้ว', fmtDate(x.measured_at), x.measured_time ? x.measured_time.slice(0, 5) : '',
-        `${x.fbs} mg/dL`, FAST_LABEL[x.fasting] || '']);
-    });
-    dailyLogsFor(r.id).forEach(x => {
-      rows.push([...who, 'อาการประจำวัน วันที่ ' + x.day_number, fmtDate(x.measured_at), '', '', x.symptom || '']);
-    });
-    followUps.filter(f => f.record_id === r.id).forEach(f => {
-      rows.push([...who, 'การติดตาม', fmtDate(f.visited_at), '', f.result || '', f.note || '']);
-    });
-  });
-  const csv = '﻿' + [head, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n');
-  const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'ข้อมูลทั้งหมด_' + todayIso() + '.csv';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  toast('ส่งออกข้อมูลทั้งหมดแล้ว');
+  exportRecordsCsv(records.filter(r => codeInRange(r.code, codeFrom, codeTo)), 'ข้อมูลทั้งหมด');
 }
 
 // ---- เข้าสู่ระบบ (ชื่อผู้ใช้และรหัสผ่าน) ----
