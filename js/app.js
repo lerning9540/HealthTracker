@@ -1,7 +1,5 @@
 const TH_MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
 
-// ข้อมูลตัวอย่าง (mockup)
-
 let records = [];
 
 const $ = id => document.getElementById(id);
@@ -11,23 +9,13 @@ const opt = (v,t) => `<option value="${v}">${t}</option>`;
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtDate = iso => { const [y,m,d] = iso.split('-').map(Number); return `${d} ${TH_MONTHS[m-1]} ${y+543}`; };
 
-// เร่งด่วน: SBP ≥180 และ DBP ≥110 ต้องส่งพบแพทย์
-// สงสัยป่วย: ความดัน SBP ≥140 และ DBP ≥90 (เร่งด่วนแยกต่างหาก), น้ำตาลงดอาหาร 8 ชม. ≥126 เข้าติดตาม (BP Home 7 วัน)
-// น้ำตาลไม่ได้งดอาหาร ≥110 ให้เจาะซ้ำพรุ่งนี้โดยงดอาหาร 8 ชม.
-// ผู้ที่เป็นโรคประจำตัวแล้ว (ติ๊กในหน้าคัดกรอง) ไม่ต้องคัดกรองโรคนั้นซ้ำ จึงไม่นับค่าของโรคนั้น
 function sugarRisk(r){ return !(r.answers || {}).fDxDm && r.fbs>=126 && (r.answers || {}).fFasting === 'fast8'; }
 function needsRetest(r){ return !(r.answers || {}).fDxDm && r.fbs>=110 && (r.answers || {}).fFasting !== 'fast8'; }
-// ความดันตามเกณฑ์ลูกค้า (แก้ไขครั้งที่ 1): เร่งด่วนต้องเข้าทั้งสองค่า
-// เร่งด่วน = SBP ≥180 และ DBP ≥110 | สงสัยป่วย = SBP ≥140 และ DBP ≥90 (รวมกรณี SBP ≥180 และ DBP 90–109) | นอกนั้นยังไม่เข้าเกณฑ์
-// ผู้ที่เป็นความดันโลหิตสูงอยู่แล้วไม่นับ "สงสัยป่วย" แต่ยังแจ้งเร่งด่วนหากค่าสูงมาก
 function bpLevel(r){
   if(r.sbp>=180 && r.dbp>=110) return 'refer';
   if(!(r.answers || {}).fDxHtn && r.sbp>=140 && r.dbp>=90) return 'recheck';
   return 'normal';
 }
-// สถานะกลาง ใช้ร่วมกันทั้งระบบ (การ์ด ตัวกรอง กระดิ่ง อีเมล กล่องผลลัพธ์ รายงาน)
-// เร่งด่วน = SBP ≥180 และ DBP ≥110 | ต้องติดตาม = ความดันสงสัยป่วยตามข้อ bpLevel หรือน้ำตาลเข้าเกณฑ์ (งดอาหาร ≥126, ไม่งดอาหาร ≥110)
-// ค่าปัจจุบันที่ใช้ประเมินสถานะ: ความดันใช้ค่า BP Home ล่าสุด (ถ้ามี) น้ำตาลใช้ค่าล่าสุดที่บันทึก ถ้าไม่มีจึงใช้ค่าตอนคัดกรอง
 function currentOf(r){
   const bp = latestOf(bpHomeFor(r.id));
   const sgList = sugarLogsFor(r.id);
@@ -41,7 +29,6 @@ function currentOf(r){
     answers
   });
 }
-// orig = true ใช้ค่าตอนคัดกรอง (ไฟล์ Excel ส่งออกค่าเดิมตั้งแต่วันแรก) | ไม่ส่งมา = ใช้ค่าปัจจุบัน (หน้าจอ)
 function statusOf(r, orig){
   const c = orig ? r : currentOf(r);
   const bp = bpLevel(c);
@@ -49,11 +36,7 @@ function statusOf(r, orig){
   if(bp === 'recheck' || sugarRisk(c) || needsRetest(c)) return 'recheck';
   return 'normal';
 }
-// กลุ่มทางคลินิก: รายเก่า (มีโรคประจำตัว) ก่อน แล้วจึงแยกผู้สงสัยป่วยตามค่าที่ผิดปกติ
-// ใช้ร่วมกันทั้งการ์ดสัดส่วน การ์ดสรุป หน้าหลัก ทะเบียน และไฟล์ Excel
 const CLINICAL_LABEL = { normal:'ปกติ', htnSuspect:'สงสัยป่วยความดันโลหิตสูง', dmSuspect:'สงสัยป่วยเบาหวาน', bothSuspect:'สงสัยป่วยทั้งสองโรค', oldHtn:'รายเก่าความดันโลหิตสูง', oldDm:'รายเก่าเบาหวาน' };
-// คนหนึ่งคนอาจนับได้มากกว่า 1 กลุ่ม เช่น เป็นเบาหวานอยู่แล้ว (รายเก่าเบาหวาน) และความดันเข้าเกณฑ์ (สงสัยป่วยความดัน)
-// ผู้ที่เป็นความดันทั้งสองโรคนับในกลุ่มความดันโลหิตสูงกลุ่มเดียว
 function clinicalOf(r, orig){
   const c = orig ? r : currentOf(r);
   const a = c.answers;
@@ -78,7 +61,6 @@ function typeOf(r){
   return '-';
 }
 const BADGE = { normal:['b-ok','ปกติ'], recheck:['b-warn','ต้องติดตาม'], refer:['b-bad','กึ่งวิกฤต'] };
-// ระดับเร่งด่วน: ฉุกเฉิน = SBP ≥180 และ DBP ≥120 (ส่งพบแพทย์ทันที) นอกนั้นเป็นกึ่งวิกฤต (วัดซ้ำก่อนส่งต่อ)
 function badgeOf(r, orig){
   const st = statusOf(r, orig);
   const c = orig ? r : currentOf(r);
@@ -86,134 +68,8 @@ function badgeOf(r, orig){
   return BADGE[st];
 }
 
-// ---- แจ้งเตือนทางอีเมล ----
-// การตั้งค่าแจ้งเตือน (URL, รหัสยืนยัน, อีเมลผู้รับ, หัวข้อ) เก็บในตาราง app_settings ให้ทุกเครื่องใช้ร่วมกัน
-const ALERT_LOG_KEY = 'alert_log_v1';
-const ALERT_SUBJECT_DEFAULT = '[คัดกรองสุขภาพ] มีผู้รับการคัดกรองที่ต้องติดตาม';
-const ALERT_MAX_RECIPIENTS = 2;
-
-function isValidEmail(s){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s); }
-
-// สีส้ม = รอติดตามซ้ำ (recheck) สีแดง = รอพบแพทย์ (refer)
-// ผู้ที่ต้องส่งเมล: สถานะไม่ปกติ หรือค่าเฉลี่ย BP Home 7 วันเข้าเกณฑ์ (ตัวบน ≥140 และตัวล่าง ≥90 หรือเร่งด่วน)
-// ครบกำหนดติดตามแล้ว: ความดัน (ถ้าต้องติดตาม) ครบ 7 วัน และน้ำตาล (ถ้าต้องติดตาม) บันทึกครบ 2 ครั้ง
-function followUpComplete(r){
-  const avg = bpHomeAverage(bpHomeFor(r.id), r.answers);
-  const bpApplies = !(r.answers || {}).fDxHtn && bpLevel(r) !== 'normal';
-  const sgApplies = needsSugar(r);
-  const bpDone = !bpApplies || (!!avg && avg.days >= 7);
-  const sgDone = !sgApplies || sugarLogsFor(r.id).length >= 2;
-  return bpDone && sgDone;
-}
-// รอบ 2 = ครบกำหนดติดตามทุกส่วนที่ต้องทำ และสถานะยังไม่ปกติอยู่ (ใช้ค่าปัจจุบัน)
 function bpHomeQualifies(r){
   return followUpComplete(r) && statusOf(r) !== 'normal';
-}
-function needsAlert(r){ return statusOf(r) !== 'normal' || bpHomeQualifies(r); }
-
-// ฟอร์มเมลตามแบบฟอร์มการแจ้งเตือน (แก้ไขครั้งที่ 1)
-function buildAlertMessage(r, st){
-  const a = r.answers || {};
-  const groups = clinicalOf(r).keys.filter(k => k !== 'normal').map(k => CLINICAL_LABEL[k]);
-  const avg = bpHomeAverage(bpHomeFor(r.id), r.answers);
-  const avgLevel = avg ? bpLevel({ sbp: avg.sys, dbp: avg.dia }) : 'normal';
-  const urgentLevel = r.dbp >= 120 && r.sbp >= 180 ? 'ฉุกเฉิน' : 'กึ่งวิกฤต';
-  if(st === 'refer') groups.unshift(urgentLevel);
-  const referral = st === 'refer' || avgLevel !== 'normal';
-  const lines = [
-    'มีผู้รับการคัดกรองที่ต้องติดตาม',
-    '',
-    'กลุ่มทางคลินิก: ' + (groups.join(' / ') || '-'),
-    'สถานะ: ' + (referral ? 'ส่งต่อวินิจฉัย' : 'ต้องติดตาม'),
-    '',
-    'รหัสรายบุคคล: ' + (r.code || '-'),
-    'ชื่อ นามสกุล: ' + (displayName(r) || '-'),
-    'อายุ: ' + (r.age || '-') + ' ปี · บ้านเลขที่: ' + (a.pHouse || '-') + ' · หมู่: ' + (a.pMoo || '-'),
-    '',
-    'ค่าที่ประเมินได้ในครั้งนั้น:'
-  ];
-  if(bpLevel(r) !== 'normal') lines.push('- ความดัน: ' + r.sbp + '/' + r.dbp + ' mmHg');
-  if(sugarRisk(r) || needsRetest(r)) lines.push('- เบาหวาน: น้ำตาล ' + r.fbs + ' mg/dL, ' + (a.fFasting === 'fast8' ? 'งดอาหาร 8 ชม.' : 'ไม่ได้งดอาหาร 8 ชม.'));
-  if(avg && avgLevel !== 'normal') lines.push('- BP Home เฉลี่ย 7 วัน: ' + avg.sys + '/' + avg.dia + ' mmHg');
-  lines.push(
-    '',
-    'วันที่คัดกรอง: ' + (r.date ? fmtDate(r.date) : '-'),
-    '',
-    'กรุณาเข้าระบบเพื่อดูรายละเอียด'
-  );
-  // รอบที่ 1 = ตอนคัดกรอง, รอบที่ 2 = เมื่อค่าเฉลี่ย BP Home 7 วันเข้าเกณฑ์ (ส่งแยกอีกครั้ง)
-  const key = r.id + '|' + st + '|' + (bpHomeQualifies(r) ? 'avg' : 'screen');
-  return { to: alertServer.emails.join(','), subject: alertServer.subject, body: lines.join('\n'), recordId: r.id, status: st, key };
-}
-
-function readAlertLog(){
-  try{ return JSON.parse(localStorage.getItem(ALERT_LOG_KEY) || '[]'); }
-  catch(e){ return []; }
-}
-function appendAlertLog(entry){
-  const list = readAlertLog();
-  list.push(entry);
-  try{ localStorage.setItem(ALERT_LOG_KEY, JSON.stringify(list.slice(-200))); }catch(e){}
-}
-
-async function sendAlert(msg){
-  if(!msg.to || !msg.to.split(',').every(isValidEmail)) return { ok:false, error:'ยังไม่ได้ตั้งอีเมลแจ้งเตือน' };
-  if(!alertServer.url) return { ok:false, error:'ยังไม่ได้ตั้ง URL ของ Apps Script ในฐานข้อมูล' };
-  let ok = false, error = '';
-  try{
-    // ใช้ text/plain และ no-cors เพื่อหลีกเลี่ยงการตรวจ CORS ล่วงหน้า (ผลตอบกลับอ่านไม่ได้ จึงถือว่าส่งแล้วถ้าไม่มี error)
-    await fetch(alertServer.url, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ token: alertServer.token, to: msg.to, subject: msg.subject, body: msg.body })
-    });
-    ok = true;
-  }catch(e){ error = 'เชื่อมต่อ Apps Script ไม่ได้'; }
-  appendAlertLog({ at: new Date().toISOString(), recordId: msg.recordId || '-', status: msg.status || '-', key: msg.key || '', to: msg.to, ok, error });
-  return { ok, error };
-}
-
-// ส่งเมลครั้งเดียวต่อรายการ และข้ามถ้าเคยส่งสำเร็จแล้ว
-async function maybeAlert(r){
-  if(!r || !needsAlert(r)) return;
-  const msg = buildAlertMessage(r, statusOf(r));
-  if(readAlertLog().some(e => e.key === msg.key && e.ok)) return;
-  const res = await sendAlert(msg);
-  if(!res.ok) toast('ส่งเมลแจ้งเตือนไม่สำเร็จ: ' + res.error);
-}
-
-// ลองส่งใหม่รายการที่ส่งไม่สำเร็จก่อนหน้านี้
-function retryPendingAlerts(){
-  const ids = [...new Set(readAlertLog().filter(e => !e.ok && e.recordId !== 'TEST').map(e => e.recordId))];
-  ids.forEach(id => maybeAlert(records.find(x => x.id === id)));
-}
-
-function loadAlertForm(){
-  $('alertEmail1').value = alertServer.emails[0] || '';
-  $('alertEmail2').value = alertServer.emails[1] || '';
-  $('alertSubject').value = alertServer.subject;
-}
-async function saveAlertForm(){
-  if(!canView('admin')){ toast('เฉพาะผู้ดูแลระบบบันทึกการตั้งค่าได้'); return false; }
-  const emails = [$('alertEmail1').value, $('alertEmail2').value].map(s => s.trim()).filter(Boolean);
-  if(!emails.length){ toast('กรุณากรอกอีเมลอย่างน้อย 1 อีเมล'); return false; }
-  if(emails.length > ALERT_MAX_RECIPIENTS || !emails.every(isValidEmail)){ toast('รูปแบบอีเมลไม่ถูกต้อง หรือกรอกเกิน ' + ALERT_MAX_RECIPIENTS + ' อีเมล'); return false; }
-  const subject = $('alertSubject').value.trim() || ALERT_SUBJECT_DEFAULT;
-  const { error } = await sb.from('app_settings').upsert([
-    { key: 'alert_emails', value: emails.join(',') },
-    { key: 'alert_subject', value: subject }
-  ]);
-  if(error){ toast('บันทึกไม่สำเร็จ: ' + error.message); return false; }
-  alertServer.emails = emails;
-  alertServer.subject = subject;
-  toast('บันทึกการตั้งค่าแจ้งเตือนแล้ว');
-  return true;
-}
-async function testAlert(){
-  if(!await saveAlertForm()) return;
-  const res = await sendAlert({ to: alertServer.emails.join(','), subject: '[ทดสอบ] ' + alertServer.subject, body: 'นี่คืออีเมลทดสอบจากระบบคัดกรองสุขภาพ', recordId: 'TEST', status: 'test' });
-  toast(res.ok ? 'ส่งเมลทดสอบแล้ว ตรวจสอบกล่องจดหมาย' : 'ส่งไม่สำเร็จ: ' + res.error);
 }
 
 function toast(msg){
@@ -230,7 +86,6 @@ async function loadRecordsRemote(){
   records = data.map(r => ({ id: r.id, code: r.code, name: r.name, age: r.age, date: r.screen_date, sbp: r.sbp, dbp: r.dbp, fbs: r.fbs, answers: r.answers || {}, nurse_status: r.nurse_status, nurse_note: r.nurse_note, nurse_updated_at: r.nurse_updated_at }));
 }
 
-// ---- BP Home 7 วัน ----
 let bpHome = [];
 async function loadBpHome(){
   const { data, error } = await sb.from('bp_home_readings').select('record_id, day_number, measured_at, measured_time, systolic, diastolic');
@@ -240,8 +95,6 @@ async function loadBpHome(){
 function bpHomeFor(recordId){
   return bpHome.filter(x => x.record_id === recordId).sort((a, b) => a.day_number - b.day_number);
 }
-// ค่าเฉลี่ย 7 วัน: รวมค่าทั้งหมดที่วัด หารด้วย 28 (4 ครั้ง/วัน × 7 วัน) ทั้งตัวบนและตัวล่าง ตัดทศนิยมทิ้ง
-// จัดกลุ่มด้วยเกณฑ์ความดันเดียวกับการคัดกรอง (ต้องเข้าทั้งตัวบนและตัวล่าง)
 function bpHomeAverage(list, answers){
   if(!list.length) return null;
   const sys = Math.floor(list.reduce((a, x) => a + x.systolic, 0) / 28);
@@ -272,16 +125,13 @@ function closeBp(){
   $('bpCard').hidden = true;
   delete $('bpCard').dataset.record;
 }
-// แถบ 1–7 วัน: วันที่บันทึกแล้วจะเป็นสีเขียว
 function dayStripHtml(list){
   const done = new Set(list.map(x => x.day_number));
   const chips = [1,2,3,4,5,6,7].map(d => `<span class="day-chip${done.has(d) ? ' done' : ''}">${d}</span>`).join('');
   return `${chips}<span class="day-count">${done.size} / 7 วัน</span>`;
 }
 const BP_HOME_MAX_PER_SESSION = 2;
-// เช้า = วัดก่อน 12:00 น. เย็น = ตั้งแต่ 12:00 น.
 function sessionOf(time){ return time.slice(0, 5) < '12:00' ? 'เช้า' : 'เย็น'; }
-// แก้ไขย้อนหลัง: กดปุ่มแก้ไขข้างแถวการวัด ค่าจะถูกใส่ในฟอร์ม แล้วกดบันทึกการแก้ไข (วันที่ของแถวนั้นไม่เปลี่ยน)
 let bpEditing = null;
 let bpCurrent = [];
 function startEditBp(i){
@@ -301,7 +151,6 @@ function renderBp(){
   const avg = bpHomeAverage(list, (records.find(x => x.id === id) || {}).answers);
   $('bpStrip').innerHTML = dayStripHtml(list);
 
-  // วันละไม่เกิน 2 ครั้งช่วงเช้า และ 2 ครั้งช่วงเย็น: เลือกได้เฉพาะวันที่ยังมีช่องว่าง
   const rec = records.find(x => x.id === id);
   const counts = d => {
     const hits = list.filter(x => x.day_number === d && x.measured_time);
@@ -358,7 +207,6 @@ async function saveBp(){
     bpEditing = null;
     $('bpSys').value = '';
     $('bpDia').value = '';
-    maybeAlert(rec);
     renderBp();
     renderFollowUp();
     toast('แก้ไขการวัดแล้ว');
@@ -379,7 +227,6 @@ async function saveBp(){
   const { error } = await sb.from('bp_home_readings').insert(row);
   if(error){ toast('บันทึกไม่สำเร็จ: ' + error.message); return; }
   bpHome.push(row);
-  maybeAlert(records.find(x => x.id === id));
   $('bpSys').value = '';
   $('bpDia').value = '';
   renderBp();
@@ -387,7 +234,6 @@ async function saveBp(){
   toast('บันทึกการวัดที่บ้านแล้ว');
 }
 
-// ---- หน้ารายละเอียดผู้ป่วย: สถานะพยาบาลและบันทึกความดัน ----
 const NURSE_STATUS = [
   ['pending_review', 'รอตรวจสอบ'],
   ['acknowledged', 'รับทราบแล้ว'],
@@ -396,7 +242,6 @@ const NURSE_STATUS = [
   ['referred_to_doctor', 'ประสานส่งต่อพบแพทย์แล้ว'],
   ['follow_up_needed', 'ติดตามเพิ่มเติม']
 ];
-// ---- บันทึกประจำวัน 7 วัน (อยู่ในการ์ด BP Home): อาการ และค่าน้ำตาลของผู้ที่สงสัยป่วยเบาหวาน ----
 let dailyLogs = [];
 async function loadDailyLogs(){
   const { data, error } = await sb.from('daily_logs').select('record_id, day_number, measured_at, symptom');
@@ -406,7 +251,6 @@ async function loadDailyLogs(){
 function dailyLogsFor(recordId){
   return dailyLogs.filter(x => x.record_id === recordId).sort((a, b) => a.day_number - b.day_number);
 }
-// ---- ติดตามเบาหวานรายครั้ง (อยู่ในการ์ด BP Home): เฉพาะผู้ที่สงสัยป่วยเบาหวาน ----
 let sugarLogs = [];
 function needsSugar(r){
   return !(r.answers || {}).fDxDm && (sugarRisk(r) || needsRetest(r));
@@ -419,7 +263,6 @@ async function loadSugarLogs(){
 function sugarLogsFor(recordId){
   return sugarLogs.filter(x => x.record_id === recordId);
 }
-// เกณฑ์ติดตามเบาหวานรายครั้ง: งดอาหาร 8 ชม. ≥126 หรือไม่งด ≥110 ถือว่าสูงกว่าเกณฑ์
 function sugarFlag(x){
   if(x.fasting === 'fast8') return x.fbs >= 126;
   return x.fbs >= 110;
@@ -481,7 +324,6 @@ function renderSugar(){
     </tr>`).join('') :'<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:12px">ยังไม่มีการบันทึกน้ำตาล</td></tr>';
   $('sgSave').hidden = !canView('fu_record');
 }
-// ---- บันทึกประจำวัน 7 วัน (อยู่ในการ์ด BP Home): อาการประจำวัน ----
 async function saveDaily(){
   if(!canView('fu_record')){ toast('บันทึกได้เฉพาะ อสม.'); return; }
   const id = $('bpCard').dataset.record;
@@ -512,7 +354,6 @@ function renderDaily(id, rec){
   }).join('');
   $('dSave').hidden = !canView('fu_record');
 }
-// ชื่อที่แสดงในระบบ มีคำนำหน้าถ้าเลือกไว้ตอนคัดกรอง
 function displayName(r){
   const prefix = (r.answers || {}).pPrefix || '';
   return [prefix, r.name || ''].filter(Boolean).join(' ');
@@ -531,7 +372,6 @@ async function saveNurse(){
 }
 $('nsSave').addEventListener('click', saveNurse);
 
-// ผู้ดูแลระบบแก้วันที่คัดกรอง วันที่ของ BP Home จะคำนวณตามวันนี้ใหม่อัตโนมัติ
 async function saveScreenDate(){
   if(!canView('admin')){ toast('เฉพาะผู้ดูแลระบบแก้วันที่ได้'); return; }
   const r = records.find(x => x.id === currentPatientId);
@@ -549,14 +389,12 @@ async function saveScreenDate(){
 }
 $('pdDateSave').addEventListener('click', saveScreenDate);
 
-// ปุ่มแก้ไขในทะเบียน: เปิดฟอร์มคัดกรองแบบเดียวกันพร้อมข้อมูลเดิม
 $('regRows').addEventListener('click', e => {
   const b = e.target.closest('[data-edit]');
   if(b) startEditScreening(b.dataset.edit);
 });
 $('editCancel').addEventListener('click', cancelEditScreening);
 
-// ลบผลคัดกรองที่กรอกผิด (ผู้ดูแลระบบเท่านั้น) ตารางลูกจะถูกลบตามด้วย on delete cascade
 async function deletePatient(){
   if(!canView('admin')){ toast('เฉพาะผู้ดูแลระบบลบข้อมูลได้'); return; }
   const r = records.find(x => x.id === currentPatientId);
@@ -571,7 +409,6 @@ async function deletePatient(){
 }
 $('pdDelete').addEventListener('click', deletePatient);
 
-// ---- การแจ้งเตือน ----
 let acks = [];
 async function loadAcks(){
   const { data, error } = await sb.from('notification_acks').select('record_id, kind');
@@ -636,14 +473,12 @@ $('ntRows').addEventListener('click', e => {
   if(btn) ackNotify(btn.dataset.ack, btn.dataset.rec);
 });
 
-// ---- หน้ารายละเอียดผู้ป่วย ----
 let currentPatientId = null;
 function openPatient(id){
   currentPatientId = id;
   setView('patient');
 }
 
-// กราฟแนวโน้มความดัน: จุดแรกคือค่าแรกรับ ตามด้วยค่าล่าสุดของแต่ละวันใน BP Home
 function trendSvg(r, list){
   const pts = [{ x:0, s:r.sbp, d:r.dbp }];
   for(let day = 1; day <= 7; day++){
@@ -669,20 +504,15 @@ function trendSvg(r, list){
 
 const FAST_LABEL = { fast8: 'งดครบ 8 ชม.', notfast: 'ไม่ได้งดครบ 8 ชม.', unsure: 'ไม่แน่ใจ' };
 const MEAL_LABEL = { unknown: 'จำไม่ได้', within2: 'ภายใน 2 ชม.', over2: 'มากกว่า 2 ชม.' };
-// แสดงคำตอบทั้งหมดจากการคัดกรองครั้งแรก เป็นอ่านอย่างเดียว ใช้ข้อความหัวข้อจากฟอร์มคัดกรอง
 function renderAnswers(r){
   const a = r.answers || {};
-  // วัน เดือน ปี เวลา เป็นส่วนของวันที่คัดกรองที่แสดงอยู่แล้ว และ fNotes เป็นช่องที่เอาออกจากฟอร์มแล้ว จึงไม่แสดง
-  // คำนำหน้าแสดงรวมกับชื่อในแถวชื่อ-สกุล จึงไม่แสดงแยก
   const skip = ['fDay', 'fMonth', 'fYear', 'fHour', 'fMinute', 'fNotes', 'pPrefix'];
-  // เรียงตามลำดับช่องในฟอร์มคัดกรอง ช่องที่หาไม่พบในฟอร์มไปไว้ท้ายสุด
   const formOrder = (x, y) => {
     const ex = document.getElementById(x), ey = document.getElementById(y);
     if(!ex || !ey) return ex ? -1 : ey ? 1 : 0;
     return ex.compareDocumentPosition(ey) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
   };
   const rows = Object.keys(a).sort(formOrder).filter(k => !skip.includes(k)).map(k => {
-    // หาหัวข้อจาก label ที่ผูกกับช่อง หรือ label ที่ครอบช่องนั้น หรือ aria-label
     const el = document.getElementById(k);
     const label = document.querySelector(`label[for="${k}"]`)?.textContent.trim()
       || el?.closest('label')?.textContent.trim()
@@ -736,11 +566,9 @@ function renderPatient(){
 }
 $('pdBack').addEventListener('click', () => setView('register'));
 
-// ---- ทะเบียนและติดตาม ----
 let followUps = [];
 let regFilter = 'all';
 
-// วันที่ของระบบ: ถ้าผู้ดูแลตั้งวันที่ทดสอบไว้ ทุกช่องวันที่จะใช้วันนั้นแทนวันจริง
 let systemDate = null;
 function todayDate(){
   if(!systemDate) return new Date();
@@ -756,9 +584,7 @@ function addDays(iso, n){
   const t = new Date(y, m-1, d+n);
   return `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`;
 }
-// อยู่ในรายการติดตาม: สถานะปัจจุบันไม่ปกติ หรือผลคัดกรองไม่ปกติและยังติดตามไม่ครบ (แม้ค่าปัจจุบันจะปกติแล้ว)
 function isRisk(r){ return statusOf(r) !== 'normal' || (statusOf(r, true) !== 'normal' && !followUpComplete(r)); }
-// ส่งต่อพบแพทย์แล้ว (การติดตามครั้งล่าสุด) ไม่นับในกลุ่มเร่งด่วนอีก
 function isReferred(r){
   const last = latestFollowUp(r.id);
   return !!last && last.result === 'ส่งต่อแพทย์แล้ว';
@@ -777,7 +603,6 @@ async function loadFollowUps(){
   followUps = data;
 }
 
-// ค่าปัจจุบัน: ใช้ค่าความดันจาก BP Home และค่าน้ำตาลจากการติดตามล่าสุดที่บันทึก ถ้าไม่มีจึงใช้ค่าตอนคัดกรอง
 function latestOf(list){
   return list.slice().sort((a, b) => (a.measured_at + (a.measured_time || '')).localeCompare(b.measured_at + (b.measured_time || ''))).pop();
 }
@@ -874,8 +699,6 @@ async function saveFollow(){
   toast('บันทึกการติดตามแล้ว');
 }
 
-// ส่งออกทะเบียนพร้อมคำตอบแบบสอบถามทั้งชุด (คอลัมน์ตามชื่อช่องในฟอร์ม)
-// คอลัมน์คำตอบในไฟล์ Excel ใช้หัวข้อภาษาไทย (ไม่ใช้ชื่อฟิลด์) และข้ามช่องที่ซ้ำกับคอลัมน์หลักแล้ว
 const EXPORT_SKIP = ['pName','pPrefix','fNotes','fSbp','fDbp','fSugar','fDay','fMonth','fYear','fHour','fMinute','fDxHtn','fDxDm'];
 const EXPORT_LABEL_FALLBACK = { fDay:'วันที่คัดกรอง (วัน)', fMonth:'วันที่คัดกรอง (เดือน)', fYear:'วันที่คัดกรอง (ปี)', fHour:'เวลาคัดกรอง (ชั่วโมง)', fMinute:'เวลาคัดกรอง (นาที)', fBmi:'ดัชนีมวลกาย (BMI)', fWeight:'น้ำหนัก (กก.)', fHeight:'ส่วนสูง (ซม.)' };
 function exportLabel(k){
@@ -885,8 +708,6 @@ function exportLabel(k){
     || el?.getAttribute('aria-label');
   return t || EXPORT_LABEL_FALLBACK[k] || k;
 }
-// ไฟล์ Excel ทั้งหน้าทะเบียนและหน้ารายงานใช้ฟังก์ชันนี้ร่วมกัน และใช้ค่าตอนคัดกรอง (orig = true)
-// หน้าทะเบียน: หนึ่งคนหนึ่งแถว ใช้ข้อมูลตอนคัดกรองครั้งแรก ข้อมูลทั่วไปรวมเป็นฟิลด์เดียว
 function exportRecordsCsv(list, fileLabel){
   if(!list.length){ toast('ไม่มีข้อมูลให้ส่งออก'); return; }
   const keys = [...new Set(list.flatMap(r => Object.keys(r.answers || {})))].filter(k => !EXPORT_SKIP.includes(k));
@@ -920,7 +741,6 @@ function exportRecordsCsv(list, fileLabel){
   toast('ส่งออกไฟล์ทะเบียนแล้ว');
 }
 
-// โหลดข้อมูลจาก Supabase หลังเข้าสู่ระบบ
 async function loadSystemDate(){
   const { data, error } = await sb.from('app_settings').select('value').eq('key', 'system_date').maybeSingle();
   systemDate = (!error && data && data.value) ? data.value : null;
@@ -946,25 +766,8 @@ async function saveSystemDate(value){
 $('sysDateSave').addEventListener('click', () => saveSystemDate($('sysDate').value));
 $('sysDateReset').addEventListener('click', () => saveSystemDate(null));
 
-// URL และรหัสยืนยันของ Apps Script ไม่แสดงบนหน้าจอ
-let alertServer = { url: '', token: '', emails: [], subject: ALERT_SUBJECT_DEFAULT };
-async function loadAlertServer(){
-  const keys = ['alert_url', 'alert_token', 'alert_emails', 'alert_subject'];
-  const { data, error } = await sb.from('app_settings').select('key, value').in('key', keys);
-  if(error || !data) return;
-  const val = k => (data.find(x => x.key === k) || {}).value || '';
-  alertServer = {
-    url: val('alert_url'),
-    token: val('alert_token'),
-    emails: val('alert_emails').split(',').map(s => s.trim()).filter(Boolean),
-    subject: val('alert_subject') || ALERT_SUBJECT_DEFAULT
-  };
-}
-
 async function loadData(){
   await loadSystemDate();
-  await loadAlertServer();
-  loadAlertForm();
   await loadRecordsRemote();
   await loadFollowUps();
   await loadBpHome();
@@ -984,7 +787,6 @@ function renderDashboard(){
   const counts = { normal:0, recheck:0, refer:0 };
   records.forEach(r => counts[statusOf(r)]++);
 
-  // ตัวเลขตามแดชบอร์ดของแอป HT Care
   const risk = records.filter(isRisk);
   const overdue = risk.filter(r => followStatus(r) === 'overdue');
   const seven = risk.filter(r => (bpHomeAverage(bpHomeFor(r.id)) || { days: 0 }).days >= 7);
@@ -992,12 +794,10 @@ function renderDashboard(){
   $('kpiSuspect').textContent = counts.recheck;
   $('kpiTracking').textContent = risk.filter(r => followStatus(r) === 'pending').length;
   $('kpiSeven').textContent = seven.length;
-  // กึ่งวิกฤต = refer แต่ DBP <120 | ฉุกเฉิน = refer และ DBP ≥120 (ตรงกับป้าย badgeOf)
   const referNotSent = records.filter(r => statusOf(r) === 'refer' && !isReferred(r));
   $('kpiRefer').textContent = referNotSent.filter(r => r.dbp < 120).length;
   $('kpiEmergency').textContent = referNotSent.filter(r => r.dbp >= 120).length;
   const pct = n => total ? Math.round(n / total * 100) : 0;
-  // สัดส่วนทางคลินิก (คนที่เป็นรายเก่าทั้งความดันและเบาหวาน นับในกลุ่มความดันโลหิตสูงกลุ่มเดียว)
   const grp = { normal:0, htnSuspect:0, dmSuspect:0, bothSuspect:0, oldHtn:0, oldDm:0 };
   records.forEach(r => clinicalOf(r).keys.forEach(k => grp[k]++));
   [['thNormal', grp.normal], ['thHtnSuspect', grp.htnSuspect], ['thDmSuspect', grp.dmSuspect], ['thBothSuspect', grp.bothSuspect], ['thOldHtn', grp.oldHtn], ['thOldDm', grp.oldDm]]
@@ -1008,7 +808,6 @@ function renderDashboard(){
   updateNotifyBadge();
 
   const pctOf = n => total ? Math.round(n / total * 100) : 0;
-  // การ์ดสรุปใช้กลุ่มเดียวกับการ์ดสัดส่วนทางคลินิก
   [['sumNormal', grp.normal], ['sumHtnSuspect', grp.htnSuspect], ['sumDmSuspect', grp.dmSuspect], ['sumBothSuspect', grp.bothSuspect], ['sumOldHtn', grp.oldHtn], ['sumOldDm', grp.oldDm]]
     .forEach(([id, n]) => {
       $(id).textContent = `${n} ราย (${pctOf(n)}%)`;
@@ -1016,7 +815,6 @@ function renderDashboard(){
     });
   $('sumTotal').textContent = total + ' รายการ';
 
-  // การงดน้ำ อาหาร: งดครบ / ไม่ได้งด / ไม่แน่ใจหรือยังไม่ระบุ
   const fast = { yes:0, no:0, unknown:0 };
   records.forEach(r => {
     const v = (r.answers || {}).fFasting;
@@ -1061,7 +859,6 @@ function setDefaults(){
 }
 
 function fillMock(){
-  // ค่าตัวอย่างแสดงเป็น placeholder (ตัวอักษรจาง) ช่องยังว่างอยู่ พิมพ์ทับได้เลย
   const hints = {
     pName:'ตัวอย่าง ใจดี', pAge:'36', pHouse:'125', pMoo:'9',
     pTambon:'บ้านป่า', pAmp:'เมืองพิษณุโลก',
@@ -1093,7 +890,6 @@ function readForm(){
 }
 
 function showResult(f, st){
-  // f ต้องมี answers ด้วย เพื่อให้ข้อความตรงกับกฎของโรคประจำตัว
   const bp = bpLevel(f);
   const bpMsg = bp === 'refer'
     ? 'ความดันถึงเกณฑ์กึ่งวิกฤต/ฉุกเฉิน ให้นั่งพักอย่างน้อย 15 นาที แล้ววัดซ้ำ หากยังสูงอยู่ให้ส่งต่อพบแพทย์ทันที (ถ้า DBP ≥120 ให้ส่งพบแพทย์ทันที)'
@@ -1117,7 +913,6 @@ function showResult(f, st){
   box.scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 
-// รวมค่าทุกช่องในฟอร์มคัดกรองเป็นอ็อบเจกต์ เพื่อเก็บเป็นแบบสอบถามทั้งชุด
 function collectForm(){
   const out = {};
   document.querySelectorAll('#view-form input, #view-form select, #view-form textarea').forEach(el => {
@@ -1126,7 +921,6 @@ function collectForm(){
   return out;
 }
 
-// กันการบันทึกซ้ำ: ปิดปุ่มระหว่างบันทึก และปิดอีกครั้งจนกว่าจะแก้ไขฟอร์ม
 let evalBusy = false;
 let lastSavedKey = null;
 
@@ -1141,7 +935,6 @@ function setEvalEnabled(on){ $('btnEval').disabled = !on; }
   $('btnClear').style.display = '';
 }));
 
-// แก้ไขข้อมูลคัดกรองด้วยฟอร์มเดียวกับการคัดกรอง (ผู้ดูแลระบบเท่านั้น)
 let editingRecordId = null;
 function startEditScreening(id){
   if(!canView('admin')){ toast('เฉพาะผู้ดูแลระบบแก้ไขได้'); return; }
@@ -1196,7 +989,6 @@ async function evaluate(){
     toast('แก้ไขข้อมูลคัดกรองแล้ว');
     return;
   }
-  // เตือนก่อนบันทึกซ้ำ: ชื่อเดียวกันและวันที่คัดกรองเดียวกันที่มีอยู่แล้ว
   const dup = records.find(r => (r.name || '').trim() === f.name && r.date === f.date);
   if(dup && !confirm('มีการบันทึกของ ' + f.name + ' ในวันที่นี้แล้ว (รหัส ' + dup.code + ') ต้องการบันทึกเพิ่มอีกรายการหรือไม่?')) return;
 
@@ -1207,7 +999,6 @@ async function evaluate(){
   evalBusy = true;
   setEvalEnabled(false);
   const st = statusOf({ ...f, answers });
-  // เลขทะเบียนถัดไปจากเลขสูงสุดที่มีอยู่ (ไม่ใช้จำนวนรายการ เพราะซ้ำได้หลังลบรายการ)
   const { data, error } = await sb.from('screening_records').insert({
     code: nextRecordCode(),
     name: f.name,
@@ -1233,7 +1024,6 @@ async function evaluate(){
   $('btnClear').style.display = 'none';
   setEvalEnabled(false);
   toast('บันทึกสำเร็จแล้ว');
-  maybeAlert(rec);
 }
 
 function toggleQuitYears(){
@@ -1241,8 +1031,6 @@ function toggleQuitYears(){
   $('smokeYearWrap').style.display = $('fSmoke').value === 'quit' ? '' : 'none';
 }
 
-// ล้างค่าในช่องกรอกทั้งหมด (ไม่แตะกล่องผลลัพธ์)
-// ถ้างดอาหาร 8 ชั่วโมงแล้ว ไม่ต้องถามเวลารับประทานอาหารครั้งล่าสุด
 function toggleMeal(){
   const fast = $('fFasting').value === 'fast8';
   $('fMealWrap').style.display = fast ? 'none' : '';
@@ -1253,7 +1041,6 @@ $('fFasting').addEventListener('change', toggleMeal);
 function clearFields(){
   $('pPrefix').value = '';
   document.querySelectorAll('#view-form input, #view-form textarea').forEach(el => {
-    // ชื่อผู้คัดกรองคงไว้ เพื่อไม่ต้องกรอกใหม่ทุกครั้ง
     if(el.id === 'fBmi' || el.id === 'fScreener') return;
     if(el.type === 'checkbox') el.checked = false;
     else el.value = '';
@@ -1314,14 +1101,10 @@ function openSidebar(open){
 }
 function closeSidebar(){ openSidebar(false); }
 
-
-// ---- รายงาน ----
-// กรองช่วงเลขทะเบียน (ตั้งแต่ ถึง) เทียบแบบตัวเลขถ้าเป็นตัวเลข เช่น 9 มาก่อน 10
 function codeInRange(code, from, to){
   const cmp = (a, b) => String(a || '').localeCompare(String(b || ''), 'th', { numeric: true });
   return (!from || cmp(code, from) >= 0) && (!to || cmp(code, to) <= 0);
 }
-// ใช้ร่วมกันทั้งตารางรายงาน การพิมพ์ และการส่งออก Excel
 function filteredRecords(){
   const from = $('rFrom').value, to = $('rTo').value, st = $('rStatus').value;
   const codeFrom = $('rpCodeFrom').value.trim(), codeTo = $('rpCodeTo').value.trim();
@@ -1368,9 +1151,6 @@ function csvCell(v){
   return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
 }
 
-// ส่งออกข้อมูลทุกรายการที่บันทึกของคนในช่วงเลขทะเบียนที่กรอง (ไม่ใส่เลขทะเบียน = ทุกคน) ไม่กรองตามวันที่และสถานะ
-// หนึ่งแถวต่อหนึ่งรายการ: การคัดกรอง / BP Home / น้ำตาล / อาการประจำวัน / การติดตาม
-// หน้ารายงาน: ไฟล์ติดตาม 7 วันของทุกคนในช่วงเลขทะเบียนที่กรอง (หนึ่งแถวต่อคนต่อวัน 1–7)
 function exportAllCsv(){
   const codeFrom = $('rpCodeFrom').value.trim(), codeTo = $('rpCodeTo').value.trim();
   const list = records.filter(r => codeInRange(r.code, codeFrom, codeTo));
@@ -1407,7 +1187,6 @@ function exportAllCsv(){
   toast('ส่งออกไฟล์ติดตาม 7 วันแล้ว');
 }
 
-// ---- เข้าสู่ระบบ (ชื่อผู้ใช้และรหัสผ่าน) ----
 const PAGES = [
   { key:'dashboard', label:'Dashboard' },
   { key:'form',      label:'คัดกรองสุขภาพ' },
@@ -1446,7 +1225,6 @@ function enterApp(user){
   $('appRoot').hidden = false;
   $('whoami').textContent = user.name;
   $('whoRole').textContent = user.pages.includes('admin') ? 'ผู้ดูแลระบบ' : 'ผู้ใช้งาน';
-  // ชื่อผู้คัดกรองเริ่มต้นเป็นผู้ที่เข้าระบบ และแก้ไขได้
   $('fScreener').value = user.name;
   $('btnLogout').hidden = false;
   applyRights();
@@ -1463,7 +1241,6 @@ async function logout(){
 }
 let sb = null;
 
-// ออกจากระบบอัตโนมัติเมื่อไม่มีการใช้งานเกิน 10 นาที
 const IDLE_LIMIT_MS = 10 * 60 * 1000;
 let lastWrite = 0;
 function touchActivity(){
@@ -1483,88 +1260,161 @@ function startIdleWatch(){
   setInterval(() => { if(localStorage.getItem('login_user') && idleExpired()) logout(); }, 30000);
 }
 
-function initAuth(){
-  sb = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY) : null;
+
+async function initAuth(){
+  sb = window.supabase
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
+    : null;
+
   $('btnLogout').addEventListener('click', logout);
-  let saved = null;
-  try{ saved = JSON.parse(localStorage.getItem('login_user') || 'null'); }catch(e){}
-  if(saved && idleExpired()){
-    try{ localStorage.removeItem('login_user'); }catch(e){}
-    if(sb) sb.auth.signOut();
-    saved = null;
-  }
-  if(saved){
-    enterApp(saved);
-    if(sb) loadData();
-    startIdleWatch();
-    return;
-  }
+
   $('appRoot').hidden = true;
   $('view-login').hidden = false;
-  $('loginForm').addEventListener('submit', e => { e.preventDefault(); onLogin(); });
+
+  $('loginForm').addEventListener('submit', e => {
+    e.preventDefault();
+    onLogin();
+  });
+
+  if(!sb) return;
+
+  let saved = null;
+  try{
+    saved = JSON.parse(localStorage.getItem('login_user') || 'null');
+  }catch(e){}
+
+  if(saved && idleExpired()){
+    await sb.auth.signOut();
+    localStorage.removeItem('login_user');
+  }
+
+  // ตรวจสอบ Session จริงจาก Supabase Auth
+  const { data: sessionData, error: sessionError } =
+    await sb.auth.getSession();
+
+  if(sessionError || !sessionData.session){
+    localStorage.removeItem('login_user');
+    return;
+  }
+
+  // ตรวจสอบสิทธิ์ผู้ใช้งาน
+  const { data: row, error } = await sb
+    .from('app_users')
+    .select('email, display_name, pages, active')
+    .eq('user_id', sessionData.session.user.id)
+    .maybeSingle();
+
+  if(error || !row || !row.active || !row.pages || !row.pages.length){
+    await sb.auth.signOut();
+    localStorage.removeItem('login_user');
+    return;
+  }
+
+  const user = {
+    username: row.email,
+    name: row.display_name,
+    pages: row.pages
+  };
+
+  localStorage.setItem('login_user', JSON.stringify(user));
+
+  enterApp(user);
+  setView(firstAllowedPage());
+  startIdleWatch();
+  await loadData();
 }
 
-// บัญชีผู้ดูแลระบบหลัก ลบไม่ได้และมีสิทธิ์ทุกหน้าเสมอ
 const ADMIN_USERNAME = 'admin';
 function normUsername(username){ return username.trim().toLowerCase(); }
 
-// อีเมลที่อนุญาตต้องมีแถวใน app_users และ active = true (RLS ตรวจให้ที่ฐานข้อมูล)
 async function loadAllowedUser(email){
   const { data, error } = await sb.from('app_users').select('email, display_name, pages, active').ilike('email', email).maybeSingle();
   if(error || !data || !data.active) return null;
   return { username: email, name: data.display_name, pages: data.pages || [] };
 }
 
-// ตั้งหรือเปลี่ยนรหัสผ่านผ่านฟังก์ชันในฐานข้อมูล (เก็บแบบเข้ารหัส)
 async function setPassword(username, password){
   const { data, error } = await sb.rpc('set_password', { p_username: username, p_password: password });
   if(error || !data){ toast('ตั้งรหัสผ่านไม่สำเร็จ' + (error ? ': ' + error.message : '')); return false; }
   return true;
 }
 
+
 async function onLogin(){
   $('loginError').hidden = true;
-  if(!sb){ showLoginError('โหลดระบบเข้าสู่ระบบไม่สำเร็จ ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต'); return; }
-  const username = normUsername($('loginUser').value);
-  const password = $('loginPass').value;
-  if(!username || !password){ showLoginError('กรุณากรอกชื่อผู้ใช้และรหัสผ่าน'); return; }
-  const { data, error } = await sb.rpc('login_user', { p_username: username, p_password: password });
-  if(error){ showLoginError('เข้าสู่ระบบไม่สำเร็จ: ' + error.message); return; }
-  const row = (data || [])[0];
-  if(!row){ showLoginError('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง'); return; }
-  const user = { username: row.username, name: row.display_name, pages: row.pages || [] };
-  if(!user){
-    await sb.auth.signOut();
-    showLoginError('อีเมลนี้ยังไม่ได้รับอนุญาตให้ใช้ระบบ กรุณาติดต่อผู้ดูแลระบบ');
+
+  if(!sb){
+    showLoginError('โหลดระบบเข้าสู่ระบบไม่สำเร็จ ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต');
     return;
   }
+
+  const email = normUsername($('loginUser').value);
+  const password = $('loginPass').value;
+
+  if(!email || !password){
+    showLoginError('กรุณากรอกอีเมลและรหัสผ่าน');
+    return;
+  }
+
+  // เข้าสู่ระบบผ่าน Supabase Auth
+  const { data: authData, error: authError } =
+    await sb.auth.signInWithPassword({
+      email: email,
+      password: password
+    });
+
+ if(authError){
+  showLoginError('เข้าสู่ระบบไม่สำเร็จ: ' + authError.message);
+  return;
+}
+
+  // ตรวจสอบสิทธิ์ผู้ใช้งานจาก app_users
+  const { data: row, error: profileError } = await sb
+    .from('app_users')
+    .select('email, display_name, pages, active')
+    .eq('user_id', authData.user.id)
+    .maybeSingle();
+
+  if(profileError || !row || !row.active){
+    await sb.auth.signOut();
+    showLoginError('บัญชีนี้ยังไม่ได้รับอนุญาตให้ใช้ระบบ กรุณาติดต่อผู้ดูแลระบบ');
+    return;
+  }
+
+  const user = {
+    username: row.email,
+    name: row.display_name,
+    pages: row.pages || []
+  };
+
   if(!user.pages.length){
     await sb.auth.signOut();
     showLoginError('บัญชีนี้ยังไม่ได้กำหนดหน้าจอที่ใช้ได้ กรุณาติดต่อผู้ดูแลระบบ');
     return;
   }
-  try{ localStorage.setItem('login_user', JSON.stringify(user)); }catch(e){}
+
+  try{
+    localStorage.setItem('login_user', JSON.stringify(user));
+  }catch(e){}
+
   touchActivity();
   startIdleWatch();
   enterApp(user);
   setView(firstAllowedPage());
   await loadData();
 }
+
 initAuth();
 
-// ---- ผู้ดูแลระบบ ----
-// รายชื่อผู้ใช้ที่แก้ไขได้ เก็บในเบราว์เซอร์ (เริ่มจาก CONFIG.USERS ครั้งแรก)
 let usersCache = [];
 function getUsers(){ return usersCache; }
 
-// โหลดรายชื่อผู้ใช้จาก app_users (เฉพาะแอดมินที่อ่านได้ทั้งหมด)
 async function loadUsers(){
   const { data, error } = await sb.from('app_users').select('email, display_name, pages, active').order('email');
   if(error){ toast('โหลดรายชื่อผู้ใช้ไม่สำเร็จ: ' + error.message); return; }
   usersCache = data.map(r => ({ username: r.email, name: r.display_name, pages: r.pages || [] }));
 }
 
-// บันทึกรายการทั้งหมดลง app_users: upsert ทุกแถว และลบแถวที่หายไปจากรายการ
 async function saveUsers(list){
   const removed = usersCache.filter(o => !list.some(n => n.username === o.username)).map(o => o.username);
   let res = await sb.from('app_users').upsert(list.map(u => ({ email: u.username, display_name: u.name, pages: u.pages, active: true })));
@@ -1603,7 +1453,6 @@ function readChecks(prefix){
   return PAGES.map(p => p.key).filter(k => $(prefix + k).checked);
 }
 
-// ---- เพิ่มผู้ใช้ใหม่ ----
 function clearAddForm(){
   ['uName','uDisplay','uPass'].forEach(id => { $(id).value = ''; });
   setChecks('pg-', PRESET_STAFF);
@@ -1631,7 +1480,6 @@ async function addUser(){
   toast('เพิ่มผู้ใช้แล้ว');
 }
 
-// ---- แก้ไขผู้ใช้ (เปิดจากปุ่มแก้ไขในตาราง) ----
 function openEdit(username){
   const u = getUsers().find(x => x.username === username);
   if(!u) return;
@@ -1668,7 +1516,6 @@ async function saveEdit(){
   if(!(await saveUsers(list))) return;
   if(password && !(await setPassword(username, password))) return;
 
-  // ถ้าแก้บัญชีที่กำลังใช้อยู่ ให้สิทธิ์มีผลทันที
   if(currentUsername() === username){
     const me = { username, name, pages };
     try{ localStorage.setItem('login_user', JSON.stringify(me)); }catch(e){}
@@ -1681,7 +1528,6 @@ async function saveEdit(){
   toast('บันทึกการแก้ไขแล้ว');
 }
 
-// ---- ลบผู้ใช้ ----
 async function deleteUser(username){
   if(username === ADMIN_USERNAME){ toast('ห้ามลบบัญชีผู้ดูแลระบบหลัก'); return; }
   if(currentUsername() === username){ toast('ลบบัญชีที่กำลังใช้อยู่ไม่ได้'); return; }
@@ -1709,7 +1555,6 @@ $('adminUsers').addEventListener('click', e => {
   if(del){ deleteUser(del.dataset.del); }
 });
 
-// ---- init ----
 applyRights();
 function renderTodayChip(){
   const d = todayDate();
@@ -1725,7 +1570,6 @@ $('fHour').innerHTML = range(0,23).map(h => opt(pad(h), pad(h))).join('');
 $('fMinute').innerHTML = range(0,59).map(m => opt(pad(m), pad(m))).join('');
 
 setDefaults();
-// ค่าตัวอย่างใช้เฉพาะตอนทดสอบ: เปิดด้วย ?test ที่ท้ายลิงก์เท่านั้น
 if(new URLSearchParams(location.search).has('test')) fillMock();
 renderDashboard();
 
@@ -1756,8 +1600,6 @@ document.querySelector('.content').addEventListener('click', e => {
 $('menuBtn').addEventListener('click', () => openSidebar(!$('sidebar').classList.contains('open')));
 $('scrim').addEventListener('click', closeSidebar);
 
-$('btnSaveAlert').addEventListener('click', saveAlertForm);
-$('btnTestAlert').addEventListener('click', testAlert);
 $('regSearch').addEventListener('input', renderRegister);
 document.querySelectorAll('#view-register [data-filter]').forEach(b => {
   b.addEventListener('click', () => { regFilter = b.dataset.filter; renderRegister(); });
@@ -1784,7 +1626,5 @@ $('sgRows').addEventListener('click', e => {
   if(i !== undefined) startEditSg(Number(i));
 });
 $('bpClose').addEventListener('click', closeBp);
-loadAlertForm();
-retryPendingAlerts();
 
 setView('dashboard');
